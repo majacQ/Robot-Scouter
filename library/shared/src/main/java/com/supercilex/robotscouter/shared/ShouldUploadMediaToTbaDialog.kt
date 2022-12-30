@@ -7,10 +7,10 @@ import android.text.method.LinkMovementMethod
 import android.widget.CheckBox
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
-import androidx.fragment.app.Fragment
-import com.supercilex.robotscouter.core.data.shouldAskToUploadMediaToTba
+import androidx.fragment.app.FragmentManager
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.get
 import com.supercilex.robotscouter.core.data.shouldUploadMediaToTba
-import com.supercilex.robotscouter.core.isInTestMode
 import com.supercilex.robotscouter.core.ui.DialogFragmentBase
 
 class ShouldUploadMediaToTbaDialog : DialogFragmentBase(), DialogInterface.OnClickListener {
@@ -31,28 +31,20 @@ class ShouldUploadMediaToTbaDialog : DialogFragmentBase(), DialogInterface.OnCli
     override fun onClick(dialog: DialogInterface, which: Int) {
         val isYes: Boolean = which == Dialog.BUTTON_POSITIVE
 
+  <<<<<<< master
+        if (requireDialog().save.isChecked) shouldUploadMediaToTba = isYes
+        ViewModelProvider(requireParentFragment()).get<TeamMediaCreator>().capture(isYes)
+  =======
         if (requireDialog().findViewById<CheckBox>(R.id.save).isChecked) {
             shouldUploadMediaToTba = isYes
         }
         (requireParentFragment() as CaptureTeamMediaListener).startCapture(isYes)
+  >>>>>>> view-binding
     }
 
     companion object {
         private const val TAG = "ShouldUploadMediaToTbaD"
 
-        fun <F> show(
-                fragment: F
-        ) where F : Fragment, F : CaptureTeamMediaListener {
-            if (isInTestMode) {
-                fragment.startCapture(false)
-                return
-            }
-
-            if (shouldAskToUploadMediaToTba) {
-                ShouldUploadMediaToTbaDialog().show(fragment.childFragmentManager, TAG)
-            } else {
-                fragment.startCapture(shouldUploadMediaToTba)
-            }
-        }
+        fun show(manager: FragmentManager) = ShouldUploadMediaToTbaDialog().show(manager, TAG)
     }
 }

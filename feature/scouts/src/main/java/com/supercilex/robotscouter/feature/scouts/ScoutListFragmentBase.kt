@@ -10,6 +10,7 @@ import android.view.View
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Observer
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager.widget.ViewPager
 import com.google.android.material.tabs.TabLayout
@@ -36,29 +37,34 @@ import com.supercilex.robotscouter.core.ui.FragmentBase
 import com.supercilex.robotscouter.core.ui.KeyboardShortcutListener
 import com.supercilex.robotscouter.core.ui.LifecycleAwareLazy
 import com.supercilex.robotscouter.core.ui.RecyclerPoolHolder
+import com.supercilex.robotscouter.core.ui.hasPermsOnRequestPermissionsResult
 import com.supercilex.robotscouter.core.ui.longSnackbar
+import com.supercilex.robotscouter.core.ui.requestPerms
 import com.supercilex.robotscouter.core.unsafeLazy
 import com.supercilex.robotscouter.feature.scouts.databinding.ScoutListFragmentBinding
 import com.supercilex.robotscouter.home
-import com.supercilex.robotscouter.shared.CaptureTeamMediaListener
-import com.supercilex.robotscouter.shared.PermissionRequestHandler
 import com.supercilex.robotscouter.shared.ShouldUploadMediaToTbaDialog
 import com.supercilex.robotscouter.shared.TeamDetailsDialog
 import com.supercilex.robotscouter.shared.TeamMediaCreator
 import com.supercilex.robotscouter.shared.TeamSharer
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
+  <<<<<<< master
+internal abstract class ScoutListFragmentBase : FragmentBase(R.layout.fragment_scout_list),
+        RecyclerPoolHolder, TemplateSelectionListener, Observer<Team?>,
+  =======
 internal abstract class ScoutListFragmentBase : FragmentBase(R.layout.scout_list_fragment),
         RecyclerPoolHolder, TemplateSelectionListener, Observer<Team?>, CaptureTeamMediaListener,
+  >>>>>>> view-binding
         KeyboardShortcutListener {
     override val recyclerPool by LifecycleAwareLazy { RecyclerView.RecycledViewPool() }
 
     protected var viewHolder: AppBarViewHolderBase by LifecycleAwareLazy()
         private set
 
-    private val permissionHandler by viewModels<PermissionRequestHandler>()
-    private val mediaCapture by viewModels<TeamMediaCreator>()
+    private val mediaCreator by viewModels<TeamMediaCreator>()
 
     protected val dataHolder by viewModels<TeamHolder>()
     private lateinit var team: Team
@@ -92,18 +98,6 @@ internal abstract class ScoutListFragmentBase : FragmentBase(R.layout.scout_list
         setHasOptionsMenu(true)
         savedState = savedInstanceState
 
-        permissionHandler.init(TeamMediaCreator.perms)
-        mediaCapture.init()
-        permissionHandler.onGranted.observe(this) { mediaCapture.capture(this) }
-        mediaCapture.onMediaCaptured.observe(this) {
-            GlobalScope.launch {
-                val team = team.copy()
-                team.copyMediaInfo(it)
-                team.processPotentialMediaUpload()
-                team.forceUpdate(true)
-            }
-        }
-
         team = requireArguments().getTeam()
         dataHolder.init(team)
         dataHolder.teamListener.observe(this, this)
@@ -114,7 +108,6 @@ internal abstract class ScoutListFragmentBase : FragmentBase(R.layout.scout_list
             onTeamDeleted()
         } else {
             this.team = team
-            mediaCapture.team = team.copy()
             if (pagerAdapter == null) initScoutList()
         }
     }
@@ -127,6 +120,13 @@ internal abstract class ScoutListFragmentBase : FragmentBase(R.layout.scout_list
         if (pagerAdapter != null) {
             viewPager.adapter = pagerAdapter
             tabs.setupWithViewPager(viewPager)
+        }
+
+        viewLifecycleOwner.lifecycleScope.launchWhenCreated {
+            mediaCreator.viewActions.collect { onViewActionRequested(it) }
+        }
+        mediaCreator.state.observe(viewLifecycleOwner) {
+            onViewStateChanged(it)
         }
     }
 
@@ -160,20 +160,23 @@ internal abstract class ScoutListFragmentBase : FragmentBase(R.layout.scout_list
             requestCode: Int,
             permissions: Array<String>,
             grantResults: IntArray
-    ) = permissionHandler.onRequestPermissionsResult(this, requestCode, permissions, grantResults)
-
-    override fun startCapture(shouldUploadMediaToTba: Boolean) =
-            mediaCapture.capture(this, shouldUploadMediaToTba)
+    ) {
+        if (
+            requestCode == PERMS_RC &&
+            hasPermsOnRequestPermissionsResult(permissions, grantResults)
+        ) {
+            mediaCreator.capture()
+        }
+    }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        permissionHandler.onActivityResult(requestCode, resultCode, data)
-        mediaCapture.onActivityResult(requestCode, resultCode, data)
+        mediaCreator.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.action_new_scout -> addScout()
-            R.id.action_add_media -> ShouldUploadMediaToTbaDialog.show(this)
+            R.id.action_add_media -> mediaCreator.capture()
             R.id.action_share -> TeamSharer.shareTeams(this, listOf(team))
             R.id.action_edit_template -> {
                 val templateId = team.templateId
@@ -212,6 +215,30 @@ internal abstract class ScoutListFragmentBase : FragmentBase(R.layout.scout_list
         return true
     }
 
+    private fun onViewActionRequested(action: TeamMediaCreator.ViewAction) {
+        when (action) {
+            is TeamMediaCreator.ViewAction.RequestPermissions ->
+                requestPerms(action.perms.toTypedArray(), action.rationaleId, PERMS_RC)
+            is TeamMediaCreator.ViewAction.StartIntentForResult ->
+                startActivityForResult(action.intent, action.rc)
+            is TeamMediaCreator.ViewAction.ShowTbaUploadDialog ->
+                ShouldUploadMediaToTbaDialog.show(childFragmentManager)
+        }
+    }
+
+    private fun onViewStateChanged(state: TeamMediaCreator.State) {
+        val image = state.image
+        if (image != null) {
+            mediaCreator.reset()
+            GlobalScope.launch {
+                val team = team.copy()
+                team.copyMediaInfo(image.media, image.shouldUploadMediaToTba)
+                team.processPotentialMediaUpload()
+                team.forceUpdate(true)
+            }
+        }
+    }
+
     private fun showTeamDetails() = TeamDetailsDialog.show(childFragmentManager, team)
 
     private fun addScoutWithSelector() = ScoutTemplateSelectorDialog.show(childFragmentManager)
@@ -244,6 +271,8 @@ internal abstract class ScoutListFragmentBase : FragmentBase(R.layout.scout_list
     protected abstract fun onTeamDeleted()
 
     protected companion object {
+        private const val PERMS_RC = 5937
+
         private val performOptionsItemSelectedField by unsafeLazy {
             Fragment::class.java
                     .getDeclaredMethod("performOptionsItemSelected", MenuItem::class.java)

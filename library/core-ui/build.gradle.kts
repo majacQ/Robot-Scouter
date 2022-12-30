@@ -28,5 +28,6 @@ dependencies {
 
     implementation(Config.Libs.Jetpack.browser)
     implementation(Config.Libs.Jetpack.pref)
+    implementation(Config.Libs.Misc.permissions)
     implementation(Config.Libs.Misc.flexbox)
 }

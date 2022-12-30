@@ -1,5 +1,6 @@
 package com.supercilex.robotscouter.core.data.model
 
+import android.net.Uri
 import android.util.Patterns
 import com.firebase.ui.firestore.SnapshotParser
 import com.google.firebase.Timestamp
@@ -22,7 +23,6 @@ import com.supercilex.robotscouter.core.data.QueryGenerator
 import com.supercilex.robotscouter.core.data.QueuedDeletion
 import com.supercilex.robotscouter.core.data.client.retrieveLocalMedia
 import com.supercilex.robotscouter.core.data.client.saveLocalMedia
-import com.supercilex.robotscouter.core.data.client.startDownloadDataJob
 import com.supercilex.robotscouter.core.data.deepLink
 import com.supercilex.robotscouter.core.data.defaultTemplateId
 import com.supercilex.robotscouter.core.data.firestoreBatch
@@ -49,7 +49,6 @@ import java.util.Calendar
 import java.util.Date
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
-import kotlin.math.sign
 
 val teamParser = SnapshotParser { checkNotNull(it.toObject<Team>()) }
 
@@ -81,11 +80,6 @@ internal val Team.isStale: Boolean
     get() = TimeUnit.MILLISECONDS.toDays(
             System.currentTimeMillis() - timestamp.time
     ) >= TEAM_FRESHNESS_DAYS
-
-internal val Team.isTrashed: Boolean?
-    get() {
-        return owners[uid ?: return null]?.sign == -1
-    }
 
 fun Collection<Team>.getNames(): String {
     val sortedTeams = toMutableList()
@@ -171,11 +165,11 @@ suspend fun List<DocumentReference>.shareTeams(
     QueuedDeletion.ShareToken.Team(token, ids)
 }
 
-fun Team.copyMediaInfo(newTeam: Team) {
-    media = newTeam.media
-    hasCustomMedia = newTeam.hasCustomMedia
-    shouldUploadMediaToTba = newTeam.shouldUploadMediaToTba
-    mediaYear = newTeam.mediaYear
+fun Team.copyMediaInfo(image: Uri, shouldUpload: Boolean) {
+    media = image.path
+    hasCustomMedia = true
+    shouldUploadMediaToTba = shouldUpload
+    mediaYear = Calendar.getInstance().get(Calendar.YEAR)
 }
 
 suspend fun Team.processPotentialMediaUpload() = Dispatchers.IO {
@@ -224,7 +218,9 @@ fun untrashTeam(id: String) {
 }
 
 internal fun Team.fetchLatestData() {
-    if (isStale) startDownloadDataJob()
+    if (!isStale || timestamp.time == 0L) return
+
+    ref.update(FIRESTORE_TIMESTAMP, Date(0)).logFailures("fetchLatestData", ref)
 }
 
 suspend fun Team.getScouts(): List<Scout> = coroutineScope {

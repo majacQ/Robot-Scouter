@@ -8,6 +8,7 @@ import androidx.annotation.CallSuper
 import androidx.annotation.ColorInt
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.postDelayed
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.LiveData
 import androidx.palette.graphics.Palette
 import androidx.palette.graphics.get
@@ -23,8 +24,14 @@ import com.supercilex.robotscouter.core.data.model.displayableMedia
 import com.supercilex.robotscouter.core.data.model.isOutdatedMedia
 import com.supercilex.robotscouter.core.model.Team
 import com.supercilex.robotscouter.core.ui.setOnLongClickListenerCompat
+  <<<<<<< master
+import com.supercilex.robotscouter.shared.TeamMediaCreator
+import kotlinx.android.extensions.LayoutContainer
+import kotlinx.android.synthetic.main.fragment_scout_list_toolbar.*
+  =======
 import com.supercilex.robotscouter.feature.scouts.databinding.ScoutListToolbarFragmentBinding
 import com.supercilex.robotscouter.shared.ShouldUploadMediaToTbaDialog
+  >>>>>>> view-binding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.invoke
@@ -45,6 +52,8 @@ internal open class AppBarViewHolderBase(
     val toolbar: Toolbar = binding.scoutsToolbar
     private val toolbarHeight =
             fragment.resources.getDimensionPixelSize(RC.dimen.scout_toolbar_height)
+
+    private val mediaCreator by fragment.viewModels<TeamMediaCreator>()
 
     private lateinit var newScoutItem: MenuItem
     private lateinit var addMediaItem: MenuItem
@@ -191,7 +200,7 @@ internal open class AppBarViewHolderBase(
 
     override fun onLongClick(v: View): Boolean {
         when {
-            v.id == R.id.backdrop -> ShouldUploadMediaToTbaDialog.show(fragment)
+            v.id == R.id.backdrop -> mediaCreator.capture()
             v.id == R.id.action_new_scout ->
                 ScoutTemplateSelectorDialog.show(fragment.childFragmentManager)
             else -> return false

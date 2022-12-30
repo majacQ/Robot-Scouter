@@ -8,6 +8,7 @@ import com.google.pubsub.v1.PubsubMessage
 import com.supercilex.robotscouter.build.internal.isRelease
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
@@ -27,18 +28,29 @@ import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 
 internal abstract class DeployServer : DefaultTask() {
+    @set:Option(option = "dev", description = "Skip sanity checks.")
+    @get:Input
+    var dev: Boolean = false
+
     @get:Optional
     @get:Input
     @set:Option(option = "only", description = "See firebase help documentation")
     var only: String? = null
+
     @get:Input
     @set:Option(option = "update-templates", description = "Trigger default templates update")
     var updateTemplates: Boolean = false
 
     @get:PathSensitive(PathSensitivity.RELATIVE)
     @get:InputFile
-    protected val transpiledJs = project.layout.buildDirectory
-            .file("classes/kotlin/main/functions.js")
+    protected val commonJs = project.rootProject.layout.buildDirectory.file(
+            "js/packages/Robot-Scouter-common-server/kotlin/Robot-Scouter-common-server.js")
+
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    @get:InputFile
+    protected val serverJs = project.rootProject.layout.buildDirectory.file(
+            "js/packages/Robot-Scouter-functions/kotlin/Robot-Scouter-functions.js")
+
     @get:OutputFile
     protected val targetJs = project.layout.projectDirectory.file("upload/index.js")
 
@@ -48,23 +60,14 @@ internal abstract class DeployServer : DefaultTask() {
 
     @TaskAction
     fun deploy() {
-        project.configurations.getByName("compileClasspath").filter {
-            it.absolutePath.contains(project.rootDir.absolutePath)
-        }.forEach { file ->
-            project.copy {
-                includeEmptyDirs = false
-
-                from(project.zipTree(file.absolutePath))
-                into("upload/common")
-                include { it.name == "common.js" }
-                rename("common.js", "index.js")
-            }
-        }
-        transpiledJs.get().asFile.copyTo(targetJs.asFile, true)
-
         project.serviceOf<WorkerExecutor>().noIsolation().submit(Deployer::class) {
+            commonJsFile.set(commonJs)
+            serverJsFile.set(serverJs)
+
             functionsDir.set(project.layout.projectDirectory.dir("upload"))
             serverDir.set(project.rootProject.child("server").projectDir)
+
+            devFlag.set(dev)
             onlyFlag.set(only)
             updateTemplatesFlag.set(updateTemplates)
         }
@@ -74,11 +77,18 @@ internal abstract class DeployServer : DefaultTask() {
             private val execOps: ExecOperations
     ) : WorkAction<Deployer.Params> {
         override fun execute() {
-            installIfNeeded("npm -v", "npm", "6.13.4")
-            installIfNeeded("firebase -V", "firebase-tools", "7.11.0")
-            execOps.exec {
-                workingDir = parameters.functionsDir.get().asFile
-                commandLine("sh", "-c", "npm ci")
+            parameters.commonJsFile.get().asFile.copyTo(
+                    parameters.functionsDir.file("common/index.js").get().asFile, true)
+            parameters.serverJsFile.get().asFile.copyTo(
+                    parameters.functionsDir.dir("index.js").get().asFile, true)
+
+            if (!parameters.devFlag.get()) {
+                installIfNeeded("npm -v", "npm", "6.14.2")
+                installIfNeeded("firebase -V", "firebase-tools", "7.14.0")
+                execOps.exec {
+                    workingDir = parameters.functionsDir.get().asFile
+                    commandLine("sh", "-c", "npm ci")
+                }
             }
 
             deployFirebase()
@@ -132,9 +142,13 @@ internal abstract class DeployServer : DefaultTask() {
         }
 
         interface Params : WorkParameters {
+            val commonJsFile: RegularFileProperty
+            val serverJsFile: RegularFileProperty
+
             val functionsDir: DirectoryProperty
             val serverDir: DirectoryProperty
 
+            val devFlag: Property<Boolean>
             val onlyFlag: Property<String>
             val updateTemplatesFlag: Property<Boolean>
         }

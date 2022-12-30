@@ -21,6 +21,7 @@ import com.supercilex.robotscouter.server.utils.delete
 import com.supercilex.robotscouter.server.utils.deletionQueue
 import com.supercilex.robotscouter.server.utils.duplicateTeams
 import com.supercilex.robotscouter.server.utils.firestore
+import com.supercilex.robotscouter.server.utils.getAsMap
 import com.supercilex.robotscouter.server.utils.getTeamsQuery
 import com.supercilex.robotscouter.server.utils.getTemplatesQuery
 import com.supercilex.robotscouter.server.utils.getTrashedTeamsQuery
@@ -106,24 +107,26 @@ fun emptyTrash(): Promise<*>? = GlobalScope.async {
 
 fun emptyTrash(data: Json, context: CallableContext): Promise<*>? {
     val auth = context.auth ?: throw HttpsError("unauthenticated")
-    return emptyTrash(auth, data)
+    return GlobalScope.async {
+        emptyTrash(auth, data)
+    }.asPromise()
 }
 
-fun emptyTrash(auth: AuthContext, data: Json): Promise<*>? {
+suspend fun emptyTrash(auth: AuthContext, data: Json) {
     @Suppress("UNCHECKED_CAST")
     val ids = data["ids"] as? Array<String>?
 
     console.log("Emptying trash for ${auth.uid}.")
-    return GlobalScope.async {
-        val requests = deletionQueue.doc(auth.uid).get().await()
+    val requests = deletionQueue.doc(auth.uid).get().await()
 
-        if (!requests.exists) {
-            console.log("Nothing to delete")
-            return@async
-        }
+    if (!requests.exists) {
+        console.log("Nothing to delete")
+        return
+    }
 
+    coroutineScope {
         processDeletion(requests, ids.orEmpty().toList())
-    }.asPromise()
+    }
 }
 
 fun sanitizeDeletionRequest(event: Change<DeltaDocumentSnapshot>): Promise<*>? {
@@ -318,7 +321,7 @@ suspend fun deleteTeam(team: DocumentSnapshot) {
             it.ref.collection(FIRESTORE_METRICS).delete()
         }
 
-        team.get<Json>(FIRESTORE_OWNERS).toMap<Long>().map { (uid) ->
+        team.getAsMap<Long>(FIRESTORE_OWNERS).map { (uid) ->
             duplicateTeams.doc(uid)
                     .set(json(id to FieldValues.delete()), SetOptions.merge)
                     .asDeferred()
