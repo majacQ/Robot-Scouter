@@ -24,9 +24,14 @@ import com.supercilex.robotscouter.core.data.model.displayableMedia
 import com.supercilex.robotscouter.core.data.model.isOutdatedMedia
 import com.supercilex.robotscouter.core.model.Team
 import com.supercilex.robotscouter.core.ui.setOnLongClickListenerCompat
+  <<<<<<< master
 import com.supercilex.robotscouter.shared.TeamMediaCreator
 import kotlinx.android.extensions.LayoutContainer
 import kotlinx.android.synthetic.main.fragment_scout_list_toolbar.*
+  =======
+import com.supercilex.robotscouter.feature.scouts.databinding.ScoutListToolbarFragmentBinding
+import com.supercilex.robotscouter.shared.ShouldUploadMediaToTbaDialog
+  >>>>>>> view-binding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.invoke
@@ -38,12 +43,13 @@ import com.supercilex.robotscouter.R as RC
 internal open class AppBarViewHolderBase(
         private val fragment: ScoutListFragmentBase,
         listener: LiveData<Team?>
-) : LayoutContainer, View.OnLongClickListener, RequestListener<Bitmap> {
+) : View.OnLongClickListener, RequestListener<Bitmap> {
     protected lateinit var team: Team
 
-    final override val containerView: View = fragment.view?.findViewById<View>(R.id.header)
-            ?: fragment.requireActivity().findViewById(R.id.header)
-    val toolbar: Toolbar = scoutsToolbar
+    protected val binding = ScoutListToolbarFragmentBinding.bind(
+            fragment.view?.findViewById<View>(R.id.header)
+                    ?: fragment.requireActivity().findViewById(R.id.header))
+    val toolbar: Toolbar = binding.scoutsToolbar
     private val toolbarHeight =
             fragment.resources.getDimensionPixelSize(RC.dimen.scout_toolbar_height)
 
@@ -54,7 +60,7 @@ internal open class AppBarViewHolderBase(
     private lateinit var editTemplateItem: MenuItem
 
     init {
-        backdrop.setOnLongClickListenerCompat(this)
+        binding.backdrop.setOnLongClickListenerCompat(this)
         listener.observe(fragment.viewLifecycleOwner) {
             team = it ?: return@observe
             bind()
@@ -69,7 +75,7 @@ internal open class AppBarViewHolderBase(
     }
 
     private fun loadImages() {
-        progress.show()
+        binding.progress.show()
         Glide.with(fragment)
                 .asBitmap()
                 .load(team.displayableMedia)
@@ -81,7 +87,7 @@ internal open class AppBarViewHolderBase(
                     }
                 }
                 .listener(this)
-                .into(backdrop)
+                .into(binding.backdrop)
     }
 
     override fun onResourceReady(
@@ -91,7 +97,7 @@ internal open class AppBarViewHolderBase(
             dataSource: DataSource,
             isFirstResource: Boolean
     ): Boolean {
-        progress.hide(true)
+        binding.progress.hide(true)
         toolbar.postDelayed(ARTIFICIAL_POSTPONE_DELAY) { fragment.startPostponedEnterTransition() }
 
         if (resource?.isRecycled == false) {
@@ -134,7 +140,8 @@ internal open class AppBarViewHolderBase(
                 // text is visible.
                 if (top.isMostlyWhite() || bottom.isMostlyWhite()) {
                     Dispatchers.Main {
-                        holderRef().header.post { header.scrimVisibleHeightTrigger = Int.MAX_VALUE }
+                        val header = holderRef().binding.header
+                        header.post { header.scrimVisibleHeightTrigger = Int.MAX_VALUE }
                     }
                 }
             }
@@ -149,14 +156,14 @@ internal open class AppBarViewHolderBase(
             target: Target<Bitmap>,
             isFirstResource: Boolean
     ): Boolean {
-        progress.hide(true)
+        binding.progress.hide(true)
         toolbar.postDelayed(ARTIFICIAL_POSTPONE_DELAY) { fragment.startPostponedEnterTransition() }
         return false
     }
 
     @CallSuper
     protected open fun updateScrim(@ColorInt color: Int) =
-            header.setContentScrimColor(getTransparentColor(color))
+            binding.header.setContentScrimColor(getTransparentColor(color))
 
     fun initMenu() {
         toolbar.menu.clear()
