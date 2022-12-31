@@ -4,13 +4,60 @@
   "dependencies": {
     "@google-cloud/firestore": "3.7.1",
     "Robot-Scouter-common-server": "file:./common",
+  <<<<<<< snyk-upgrade-7f0597bb6e23369c1f455935b78b81bf
+    "firebase-admin": "10.2.0",
+  =======
+  <<<<<<< snyk-upgrade-bbd6dc27ac9e6fe3fd325a1e5d448f8b
+    "firebase-admin": "11.0.0",
+  =======
+  <<<<<<< snyk-upgrade-6ea513b85986a7eb9039948496b362bc
     "firebase-admin": "8.10.0",
+  <<<<<<< snyk-upgrade-d68e0ca316090353d0d92e6adcda6595
+    "firebase-functions": "4.0.1",
+  =======
+  <<<<<<< snyk-upgrade-e06dece1d9f608c1fddd7fff75211f18
+    "firebase-functions": "4.0.2",
+  =======
+  >>>>>>> instant-apps
+  >>>>>>> instant-apps
     "firebase-functions": "3.3.0",
+  <<<<<<< snyk-upgrade-874a353efd51b8f43972f9039271c032
+    "kotlin": "1.6.20",
+  =======
+  <<<<<<< snyk-upgrade-a860059acd93615cea58233fb1d9c4b3
+    "kotlin": "1.7.21",
+  =======
+    "kotlin": "1.7.22",
+  =======
+    "firebase-admin": "11.4.1",
+    "firebase-functions": "3.6.2",
+  >>>>>>> instant-apps
+  >>>>>>> instant-apps
     "kotlin": "1.3.70",
-    "kotlinx-coroutines-core": "1.3.4",
+  <<<<<<< snyk-upgrade-9c662271d1b100099dd75695d0b7ad55
+    "kotlinx-coroutines-core": "1.6.1",
     "lru-cache": "5.1.1",
+  =======
+  >>>>>>> instant-apps
+  >>>>>>> instant-apps
+  >>>>>>> instant-apps
+    "kotlinx-coroutines-core": "1.3.4",
+    "lru-cache": "7.14.1",
+  >>>>>>> instant-apps
     "moment": "2.24.0",
+  <<<<<<< snyk-upgrade-4a683c42f1cb4862e93a004c74cd80b0
     "superagent": "8.0.2"
+  =======
+  <<<<<<< snyk-upgrade-50ab7223c445d17fc6e3dfd373daecda
+    "superagent": "8.0.3"
+  =======
+  <<<<<<< snyk-upgrade-92d960bdb8fbb254f78bcf5f00e4ce05
+    "superagent": "8.0.4"
+  =======
+    "superagent": "8.0.5"
+  >>>>>>> instant-apps
+  >>>>>>> instant-apps
+  >>>>>>> instant-apps
   },
   "private": true,
   "engines": {
