@@ -4,6 +4,9 @@
   "dependencies": {
     "@google-cloud/firestore": "3.7.1",
     "Robot-Scouter-common-server": "file:./common",
+  <<<<<<< snyk-upgrade-7f0597bb6e23369c1f455935b78b81bf
+    "firebase-admin": "10.2.0",
+  =======
   <<<<<<< snyk-upgrade-bbd6dc27ac9e6fe3fd325a1e5d448f8b
     "firebase-admin": "11.0.0",
   =======
@@ -12,6 +15,7 @@
   <<<<<<< snyk-upgrade-e06dece1d9f608c1fddd7fff75211f18
     "firebase-functions": "4.0.2",
   =======
+  >>>>>>> instant-apps
   >>>>>>> instant-apps
     "firebase-functions": "3.3.0",
   <<<<<<< snyk-upgrade-874a353efd51b8f43972f9039271c032
