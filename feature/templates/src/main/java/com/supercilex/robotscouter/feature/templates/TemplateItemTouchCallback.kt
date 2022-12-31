@@ -1,8 +1,21 @@
 package com.supercilex.robotscouter.feature.templates
 
+  <<<<<<< snyk-upgrade-c51256f3d7c7d5c156a4e29578c16aa5
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.drawable.Drawable
+  <<<<<<< snyk-upgrade-fa0fb9950364cdb0ca0f7052bac8aede
+  =======
+  <<<<<<< snyk-upgrade-e3e183a68c11f3b1dc83966f2fc5672d
+  =======
+  =======
+import android.support.design.widget.AppBarLayout
+import android.support.v4.app.FragmentActivity
+import android.support.v7.widget.RecyclerView
+import android.support.v7.widget.helper.ItemTouchHelper
+  >>>>>>> item-selector-trashing
+  >>>>>>> item-selector-trashing
+  >>>>>>> item-selector-trashing
 import android.view.View
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
@@ -26,11 +39,11 @@ import com.supercilex.robotscouter.core.ui.showKeyboard
 import com.supercilex.robotscouter.core.ui.swap
 import com.supercilex.robotscouter.feature.templates.viewholder.TemplateViewHolder
 import java.util.Collections
-import kotlin.math.roundToInt
 import com.supercilex.robotscouter.R as RC
 
 internal class TemplateItemTouchCallback<T : OrderedRemoteModel>(
         private val rootView: View
+  <<<<<<< snyk-upgrade-c51256f3d7c7d5c156a4e29578c16aa5
 ) : ItemTouchHelper.SimpleCallback(
         ItemTouchHelper.UP or ItemTouchHelper.DOWN,
         ItemTouchHelper.START
@@ -47,7 +60,21 @@ internal class TemplateItemTouchCallback<T : OrderedRemoteModel>(
         color = ContextCompat.getColor(rootView.context, RC.color.delete_background)
     }
     private val deleteIconPadding = rootView.resources.getDimensionPixelSize(RC.dimen.spacing_large)
+  <<<<<<< snyk-upgrade-fa0fb9950364cdb0ca0f7052bac8aede
+  =======
+  <<<<<<< snyk-upgrade-e3e183a68c11f3b1dc83966f2fc5672d
+  =======
 
+  =======
+) : DeletingItemTouchCallback(ItemTouchHelper.UP or ItemTouchHelper.DOWN, rootView.context) {
+    private val recyclerView: RecyclerView = rootView.find(RC.id.metricsView)
+    private val appBar: AppBarLayout = (rootView.context as FragmentActivity).find(R.id.appBar)
+    var adapter: FirestoreRecyclerAdapter<T, *> by LateinitVal()
+    var itemTouchHelper: ItemTouchHelper by LateinitVal()
+  >>>>>>> item-selector-trashing
+  >>>>>>> item-selector-trashing
+
+  >>>>>>> item-selector-trashing
     private val localItems = mutableListOf<T>()
     private var animatorPointer: RecyclerView.ItemAnimator? = null
     private var scrollToPosition = RecyclerView.NO_POSITION
@@ -246,6 +273,10 @@ internal class TemplateItemTouchCallback<T : OrderedRemoteModel>(
                 }.logFailures("onSwiped:addMetric", deletedRef, itemsBelow)
             }
         }.logFailures("onSwiped:getMetric", deletedRef)
+  <<<<<<< snyk-upgrade-fa0fb9950364cdb0ca0f7052bac8aede
+  =======
+  <<<<<<< snyk-upgrade-e3e183a68c11f3b1dc83966f2fc5672d
+  >>>>>>> item-selector-trashing
     }
 
     override fun onChildDraw(
@@ -281,6 +312,8 @@ internal class TemplateItemTouchCallback<T : OrderedRemoteModel>(
             )
             draw(c)
         }
+  =======
+  >>>>>>> item-selector-trashing
     }
 
     override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
