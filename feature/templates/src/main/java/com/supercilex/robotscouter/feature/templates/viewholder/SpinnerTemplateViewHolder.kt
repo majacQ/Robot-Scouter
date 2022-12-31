@@ -131,8 +131,11 @@ internal class SpinnerTemplateViewHolder(
   <<<<<<< snyk-upgrade-c51256f3d7c7d5c156a4e29578c16aa5
                 R.id.delete -> delete(items)
                 else -> error("Unknown id: $id")
+  <<<<<<< snyk-upgrade-e3e183a68c11f3b1dc83966f2fc5672d
+  =======
   =======
                 else -> error("Unknown id: ${v.id}")
+  >>>>>>> item-selector-trashing
   >>>>>>> item-selector-trashing
             }
         }
