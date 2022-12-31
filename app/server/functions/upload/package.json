@@ -6,8 +6,13 @@
     "Robot-Scouter-common-server": "file:./common",
     "firebase-admin": "10.3.0",
     "firebase-functions": "3.3.0",
+  <<<<<<< snyk-upgrade-d3db7fb2be90c12649a00ee74fe36887
+    "kotlin": "1.3.70",
+    "kotlinx-coroutines-core": "1.6.2",
+  =======
     "kotlin": "1.7.0",
     "kotlinx-coroutines-core": "1.3.4",
+  >>>>>>> item-selector-trashing
     "lru-cache": "5.1.1",
     "moment": "2.24.0",
   <<<<<<< snyk-upgrade-e24a48dcfb48e71c7f6e023bd0b70e78
