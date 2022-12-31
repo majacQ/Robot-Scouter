@@ -10,7 +10,11 @@
     "kotlinx-coroutines-core": "1.3.4",
     "lru-cache": "5.1.1",
     "moment": "2.24.0",
+  <<<<<<< snyk-upgrade-e24a48dcfb48e71c7f6e023bd0b70e78
+    "superagent": "7.1.5"
+  =======
     "superagent": "7.1.6"
+  >>>>>>> item-selector-trashing
   },
   "private": true,
   "engines": {
