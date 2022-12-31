@@ -25,8 +25,21 @@ internal class ScoutListActivity : ActivityBase() {
                     ActivityScoutListFragment.TAG)
             }
         }
+
+  <<<<<<< snyk-upgrade-8b98c69bb7423e6986ea50fb8b76167d
+  =======
+        registerShortcut(KeyEvent.KEYCODE_N, KeyEvent.META_SHIFT_ON, 0) {
+            scoutListFragment.addScoutWithSelector()
+        }
+        registerShortcut(KeyEvent.KEYCODE_N, 0) {
+            scoutListFragment.addScout()
+        }
+        registerShortcut(KeyEvent.KEYCODE_D, 0) {
+            scoutListFragment.showTeamDetails()
+        }
     }
 
+  >>>>>>> shortcuts
     companion object : ScoutListActivityCompanion {
         override fun createIntent(args: Bundle): Intent =
                 Intent(RobotScouter, ScoutListActivity::class.java)

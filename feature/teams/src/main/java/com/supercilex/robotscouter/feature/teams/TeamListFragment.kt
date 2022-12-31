@@ -74,8 +74,16 @@ internal class TeamListFragment : FragmentBase(R.layout.fragment_team_list),
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setHasOptionsMenu(true)
+  <<<<<<< snyk-upgrade-8b98c69bb7423e6986ea50fb8b76167d
         holder.init()
         tutorialHelper.init()
+  =======
+        holder.init(savedInstanceState)
+        tutorialHelper.init(null)
+
+        registerShortcut(KeyEvent.KEYCODE_N, 0) { onClick(fab) }
+    }
+  >>>>>>> shortcuts
 
         if (!requireContext().isInTabletMode()) holder.selectTeam(null)
     }
@@ -184,13 +192,6 @@ internal class TeamListFragment : FragmentBase(R.layout.fragment_team_list),
         } else {
             (activity as SignInResolver).showSignInResolution()
         }
-    }
-
-    override fun onShortcut(keyCode: Int, event: KeyEvent) = if (keyCode == KeyEvent.KEYCODE_N) {
-        onClick(fab)
-        true
-    } else {
-        false
     }
 
     override fun refresh() {
