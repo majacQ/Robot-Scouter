@@ -122,13 +122,20 @@ object Config {
         }
 
         object PlayServices {
+  <<<<<<< snyk-upgrade-46ef3a94549f1c45bfa7ee90c0e0c556
             const val auth = "com.google.android.gms:play-services-auth:17.0.0"
             const val nearby = "com.google.android.gms:play-services-nearby:17.0.0"
             const val playCore = "com.google.android.play:core-ktx:1.7.0"
+  =======
+            val auth = "com.google.android.gms:play-services-auth:16.0.1"
+            val nearby = "com.google.android.gms:play-services-nearby:16.0.0"
+            val playCore = "com.google.android.play:core:1.5.0"
+            val instantApps = "com.google.android.instantapps:instantapps:1.1.0"
+  >>>>>>> instant-apps
         }
 
         object FirebaseUi {
-            private const val version = "aa7a585303"
+            private const val version = "9fb0313100"
 
             const val firestore =
                     "com.github.SUPERCILEX.FirebaseUI-Android:firebase-ui-firestore:$version"
