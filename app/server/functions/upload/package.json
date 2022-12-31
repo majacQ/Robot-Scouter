@@ -47,6 +47,10 @@
   >>>>>>> instant-apps
   >>>>>>> instant-apps
     "kotlinx-coroutines-core": "1.3.4",
+  <<<<<<< snyk-fix-f8c515333898a40b2c12e8715ba0d57e
+    "lru-cache": "5.1.1",
+    "moment": "2.29.4",
+  =======
   <<<<<<< snyk-upgrade-5eeb3c9f8688809d1932a084b12e40bf
     "lru-cache": "7.10.2",
     "moment": "2.24.0",
@@ -80,6 +84,7 @@
     "lru-cache": "5.1.1",
   <<<<<<< snyk-upgrade-8543cad664badf2efca9f62e17d430a6
     "moment": "2.29.4",
+  >>>>>>> instant-apps
   >>>>>>> instant-apps
     "superagent": "5.2.2"
   =======
