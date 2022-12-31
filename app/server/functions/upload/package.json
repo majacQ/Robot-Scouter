@@ -14,6 +14,9 @@
   =======
   >>>>>>> instant-apps
     "firebase-functions": "3.3.0",
+  <<<<<<< snyk-upgrade-874a353efd51b8f43972f9039271c032
+    "kotlin": "1.6.20",
+  =======
   <<<<<<< snyk-upgrade-a860059acd93615cea58233fb1d9c4b3
     "kotlin": "1.7.21",
   =======
@@ -23,6 +26,7 @@
     "firebase-functions": "3.6.2",
   >>>>>>> instant-apps
     "kotlin": "1.3.70",
+  >>>>>>> instant-apps
   >>>>>>> instant-apps
   >>>>>>> instant-apps
     "kotlinx-coroutines-core": "1.3.4",
