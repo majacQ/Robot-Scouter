@@ -36,6 +36,9 @@
     "kotlin": "1.7.20",
   >>>>>>> instant-apps
     "kotlinx-coroutines-core": "1.3.4",
+  <<<<<<< snyk-upgrade-656104c69562d683302ec2c656230f59
+    "lru-cache": "7.13.1",
+  =======
   <<<<<<< snyk-upgrade-e05c2fe0f78eab9586876fcc8804da2f
     "lru-cache": "7.14.0",
   =======
@@ -64,6 +67,7 @@
   >>>>>>> instant-apps
     "kotlinx-coroutines-core": "1.3.4",
     "lru-cache": "7.14.1",
+  >>>>>>> instant-apps
   >>>>>>> instant-apps
   >>>>>>> instant-apps
     "moment": "2.24.0",
