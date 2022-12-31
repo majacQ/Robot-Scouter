@@ -34,11 +34,16 @@
   >>>>>>> instant-apps
   >>>>>>> instant-apps
     "kotlin": "1.3.70",
+  <<<<<<< snyk-upgrade-9c662271d1b100099dd75695d0b7ad55
+    "kotlinx-coroutines-core": "1.6.1",
+    "lru-cache": "5.1.1",
+  =======
   >>>>>>> instant-apps
   >>>>>>> instant-apps
   >>>>>>> instant-apps
     "kotlinx-coroutines-core": "1.3.4",
     "lru-cache": "7.14.1",
+  >>>>>>> instant-apps
     "moment": "2.24.0",
   <<<<<<< snyk-upgrade-50ab7223c445d17fc6e3dfd373daecda
     "superagent": "8.0.3"
