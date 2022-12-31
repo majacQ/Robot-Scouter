@@ -12,6 +12,10 @@
   =======
   <<<<<<< snyk-upgrade-6ea513b85986a7eb9039948496b362bc
     "firebase-admin": "8.10.0",
+  <<<<<<< snyk-upgrade-0e3e02bd85600e4b294205e392af674f
+    "firebase-functions": "3.3.0",
+    "kotlin": "1.7.10",
+  =======
   <<<<<<< snyk-upgrade-29f534b46ab85c6d8ed16839415cd65a
     "firebase-functions": "3.20.0",
   =======
@@ -37,6 +41,7 @@
     "firebase-functions": "3.3.0",
   <<<<<<< snyk-upgrade-c748b7b9c8f6c0cbf271970b2b379496
     "kotlin": "1.7.20",
+  >>>>>>> instant-apps
   >>>>>>> instant-apps
     "kotlinx-coroutines-core": "1.3.4",
   <<<<<<< snyk-upgrade-656104c69562d683302ec2c656230f59
