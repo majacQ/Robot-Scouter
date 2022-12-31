@@ -10,18 +10,20 @@
             android:id="@+id/action_export_all_teams"
             android:icon="@drawable/ic_import_export_colorable_24dp"
             android:title="@string/export_all_teams_title" />
-
-        <item
-            android:id="@+id/action_edit_templates"
-            android:icon="@drawable/ic_content_paste_colorable_24dp"
-            android:title="@string/template_activity_title" />
     </group>
 
     <group android:id="@+id/two">
         <item
-            android:id="@+id/action_donate"
+            android:id="@+id/action_view_trash"
+            android:icon="@drawable/ic_delete_colorable_24dp"
+            android:title="@string/trash_activity_title" />
+    </group>
+
+    <group android:id="@+id/three">
+        <item
+            android:id="@+id/action_donate_patreon"
             android:icon="@drawable/ic_donate_grey_24dp"
-            android:title="@string/donate_title" />
+            android:title="@string/donate_patreon_title" />
 
         <item
             android:id="@+id/action_settings"

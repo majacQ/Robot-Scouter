@@ -9,18 +9,17 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.annotation.RequiresApi
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.getSystemService
 import com.supercilex.robotscouter.core.LateinitVal
 import com.supercilex.robotscouter.core.RobotScouter
-import com.supercilex.robotscouter.core.logFailures
-import kotlinx.coroutines.experimental.Job
-import kotlinx.coroutines.experimental.asCoroutineDispatcher
-import kotlinx.coroutines.experimental.async
-import kotlinx.coroutines.experimental.delay
-import org.jetbrains.anko.intentFor
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.util.LinkedList
 import java.util.Queue
-import java.util.concurrent.Executors
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -33,12 +32,22 @@ const val EXPORT_IN_PROGRESS_CHANNEL = "export_in_progress"
  * Android N+ limits notification updates to 10/sec and drops the rest. This limits notification
  * updates to 5/sec.
  */
-const val SAFE_NOTIFICATION_RATE_LIMIT_IN_MILLIS = 200
+const val SAFE_NOTIFICATION_RATE_LIMIT_IN_MILLIS = 200L
 
-val notificationManager by lazy { checkNotNull(RobotScouter.getSystemService<NotificationManager>()) }
+val notificationManager by lazy { NotificationManagerCompat.from(RobotScouter) }
+private val systemNotificationManager by lazy {
+    checkNotNull(RobotScouter.getSystemService<NotificationManager>())
+}
 
 fun initNotifications() {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    logNotificationsEnabled(
+            notificationManager.areNotificationsEnabled(),
+            notificationManager.notificationChannels.associate {
+                it.id to (it.importance != NotificationManagerCompat.IMPORTANCE_NONE)
+            }
+    )
+
+    if (Build.VERSION.SDK_INT < 26) return
 
     notificationManager.createNotificationChannelGroups(
             listOf(NotificationChannelGroup(
@@ -51,7 +60,7 @@ fun initNotifications() {
     )
 }
 
-@RequiresApi(Build.VERSION_CODES.O)
+@RequiresApi(26)
 private fun getExportChannel(): NotificationChannel = NotificationChannel(
         EXPORT_CHANNEL,
         RobotScouter.getString(R.string.export_channel_title),
@@ -64,7 +73,7 @@ private fun getExportChannel(): NotificationChannel = NotificationChannel(
     enableLights(true)
 }
 
-@RequiresApi(Build.VERSION_CODES.O)
+@RequiresApi(26)
 private fun getExportInProgressChannel(): NotificationChannel = NotificationChannel(
         EXPORT_IN_PROGRESS_CHANNEL,
         RobotScouter.getString(R.string.export_progress_channel_title),
@@ -127,12 +136,12 @@ class FilteringNotificationManager {
             check(!isStopped) { "Cannot start a previously stopped notification filter." }
         }
 
-        processor = async(dispatcher) {
+        processor = GlobalScope.launch {
             while (isActive) {
                 processQueue()
                 delay(SAFE_NOTIFICATION_RATE_LIMIT_IN_MILLIS)
             }
-        }.logFailures()
+        }
     }
 
     fun isStopped(): Boolean = lock.read { isStopped }
@@ -171,21 +180,15 @@ class FilteringNotificationManager {
             if (isStopped && notifications.isEmpty()) processor.cancel()
         }
     }
-
-    private companion object {
-        // Use a separate thread to process notifications because the default dispatcher may be
-        // saturated.
-        val dispatcher = Executors.newFixedThreadPool(1).asCoroutineDispatcher()
-    }
 }
 
 class NotificationIntentForwarder : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        notificationManager.apply {
+        systemNotificationManager.apply {
             val notificationId = intent.getIntExtra(KEY_NOTIFICATION_ID, -1)
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (Build.VERSION.SDK_INT >= 23) {
                 // Cancel group notification if there will only be one real notification left
                 activeNotifications.singleOrNull {
                     it.id == notificationId
@@ -212,10 +215,11 @@ class NotificationIntentForwarder : Activity() {
         private const val KEY_INTENT = "intent"
         private const val KEY_NOTIFICATION_ID = "notification_id"
 
-        fun getCancelIntent(notificationId: Int, forwardedIntent: Intent): Intent =
-                RobotScouter.intentFor<NotificationIntentForwarder>(
-                        KEY_INTENT to forwardedIntent,
-                        KEY_NOTIFICATION_ID to notificationId
-                )
+        fun getCancelIntent(
+                notificationId: Int,
+                forwardedIntent: Intent
+        ): Intent = Intent(RobotScouter, NotificationIntentForwarder::class.java)
+                .putExtra(KEY_INTENT, forwardedIntent)
+                .putExtra(KEY_NOTIFICATION_ID, notificationId)
     }
 }

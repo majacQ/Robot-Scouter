@@ -1,83 +1,98 @@
 package com.supercilex.robotscouter.feature.scouts
 
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.Window
-import androidx.fragment.app.Fragment
-import androidx.fragment.app.transaction
-import com.supercilex.robotscouter.Bridge
-import com.supercilex.robotscouter.TabletScoutListFragmentBridge
-import com.supercilex.robotscouter.TabletScoutListFragmentCompanion
+import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.commit
+import com.supercilex.robotscouter.TeamSelectionListener
 import com.supercilex.robotscouter.core.ValueSeeker
 import com.supercilex.robotscouter.core.data.toBundle
 import com.supercilex.robotscouter.core.model.Team
-import com.supercilex.robotscouter.core.ui.TeamSelectionListener
 import com.supercilex.robotscouter.core.ui.animatePopReveal
 import com.supercilex.robotscouter.core.ui.isInTabletMode
-import org.jetbrains.anko.findOptional
+import com.supercilex.robotscouter.shared.SharedLifecycleResource
 import com.supercilex.robotscouter.R as RC
 
-@Bridge
-internal class TabletScoutListFragment : ScoutListFragmentBase(), TabletScoutListFragmentBridge {
-    private val noContentHint by ValueSeeker {
-        requireActivity().findOptional<View>(RC.id.noTeamSelectedHint)
+internal class TabletScoutListFragment : ScoutListFragmentBase() {
+    private val sharedResources by activityViewModels<SharedLifecycleResource>()
+    private val noContentHint: View? by ValueSeeker {
+        requireActivity().findViewById<View>(RC.id.noTeamSelectedHint)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (!requireContext().isInTabletMode()) {
-            val listener = context as TeamSelectionListener
-            listener.onTeamSelected(bundle, true)
+        val activity = requireActivity()
+        if (!activity.isInTabletMode()) {
+            val bundle = bundle
             removeFragment()
+            (activity as TeamSelectionListener).onTeamSelected(bundle)
         }
     }
 
-    override fun newViewModel(savedInstanceState: Bundle?) = object : AppBarViewHolderBase(
-            this, savedInstanceState, dataHolder.teamListener, onScoutingReadyTask.task) {
+    override fun newViewModel() = object : AppBarViewHolderBase(
+            this@TabletScoutListFragment,
+            dataHolder.teamListener
+    ) {
         init {
             toolbar.setOnMenuItemClickListener {
                 // We need to be able to guarantee that our `onOptionsItemSelected`s are called
                 // before that of TeamListActivity because of duplicate menu item ids
-                Fragment::class.java
-                        .getDeclaredMethod("performOptionsItemSelected", MenuItem::class.java)
-                        .apply { isAccessible = true }
-                        .invoke(this@TabletScoutListFragment, it) as Boolean ||
+                forceRecursiveMenuItemSelection(it) ||
                         requireActivity().onMenuItemSelected(Window.FEATURE_OPTIONS_PANEL, it)
             }
         }
     }
 
-    override fun onChanged(team: Team?) {
-        super.onChanged(team)
-        select(team)
-    }
-
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
-        super.onActivityCreated(savedInstanceState)
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        sharedResources.onCreate(this)
+        dataHolder.teamListener.observe(viewLifecycleOwner) { select(it) }
         noContentHint?.animatePopReveal(false)
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        select(null)
-        noContentHint?.animatePopReveal(true)
+    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
+        super.onCreateOptionsMenu(menu, inflater)
+        inflater.inflate(R.menu.integrated_scout_list_menu, viewHolder.toolbar.menu)
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == R.id.action_move_window) {
+            startActivity(ScoutListActivity.createIntent(bundle))
+            removeFragment()
+            return true
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        sharedResources.onDestroy(this) {
+            select(null)
+            noContentHint?.animatePopReveal(true)
+        }
     }
 
     override fun onTeamDeleted() = removeFragment()
 
     private fun select(team: Team?) {
-        requireFragmentManager().fragments.filterIsInstance<TeamSelectionListener>().forEach {
-            it.onTeamSelected(team?.toBundle() ?: Bundle.EMPTY)
-        }
+        requireActivity().supportFragmentManager.fragments
+                .filterIsInstance<TeamSelectionListener>()
+                .firstOrNull()
+                ?.onTeamSelected(team?.toBundle() ?: Bundle.EMPTY)
     }
 
     private fun removeFragment() {
-        requireFragmentManager().transaction { remove(this@TabletScoutListFragment) }
+        val parent = requireParentFragment()
+        parent.parentFragmentManager.commit { remove(parent) }
     }
 
-    companion object : TabletScoutListFragmentCompanion {
-        override fun newInstance(args: Bundle) =
-                TabletScoutListFragment().apply { arguments = args }
+    companion object {
+        const val TAG = "TabletScoutListFrag"
+
+        fun newInstance(args: Bundle) = TabletScoutListFragment().apply { arguments = args }
     }
 }

@@ -2,6 +2,7 @@ package com.supercilex.robotscouter.core.data
 
 import android.net.Uri
 import androidx.annotation.WorkerThread
+import com.google.firebase.Timestamp
 import com.google.firebase.appindexing.Action
 import com.google.firebase.appindexing.Indexable
 import com.google.firebase.appindexing.Scope
@@ -9,22 +10,23 @@ import com.google.firebase.appindexing.builders.Actions
 import com.google.firebase.appindexing.builders.Indexables
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FieldPath
-import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import com.google.firebase.functions.FirebaseFunctions
-import com.google.firebase.functions.FirebaseFunctionsException
+import com.google.firebase.functions.ktx.functions
+import com.google.firebase.ktx.Firebase
 import com.supercilex.robotscouter.common.FIRESTORE_ACTIVE_TOKENS
 import com.supercilex.robotscouter.common.FIRESTORE_NUMBER
 import com.supercilex.robotscouter.common.FIRESTORE_PREV_UID
 import com.supercilex.robotscouter.common.FIRESTORE_REF
 import com.supercilex.robotscouter.common.FIRESTORE_TIMESTAMP
 import com.supercilex.robotscouter.common.FIRESTORE_TOKEN
-import com.supercilex.robotscouter.core.await
 import com.supercilex.robotscouter.core.data.model.userDeletionQueue
-import com.supercilex.robotscouter.core.logCrashLog
 import com.supercilex.robotscouter.core.model.Team
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.tasks.asDeferred
+import kotlinx.coroutines.tasks.await
 import java.io.File
 import java.util.Date
+import java.util.UUID
 
 const val APP_LINK_BASE = "https://supercilex.github.io/Robot-Scouter/data/"
 const val ACTION_FROM_DEEP_LINK = "com.supercilex.robotscouter.action.FROM_DEEP_LINK"
@@ -44,7 +46,7 @@ val Team.indexable: Indexable
             .setName(toString())
             .apply {
                 val media = media
-                if (media?.isNotBlank() == true && !File(media).exists()) {
+                if (!media.isNullOrBlank() && !File(media).exists()) {
                     setImage(media)
                 }
             }
@@ -75,14 +77,14 @@ internal suspend fun List<DocumentReference>.share(
         block: Boolean,
         deletionGenerator: (token: String, ids: List<String>) -> QueuedDeletion.ShareToken
 ): String {
-    val token = generateToken()
+    val token = UUID.randomUUID().toString()
     val tokenPath = FieldPath.of(FIRESTORE_ACTIVE_TOKENS, token)
-    val timestamp = Date()
+    val timestamp = Timestamp.now()
 
     val update = firestoreBatch {
         forEach { update(it, tokenPath, timestamp) }
         set(userDeletionQueue, deletionGenerator(token, map { it.id }).data, SetOptions.merge())
-    }.logFailures(this, token)
+    }.logFailures("share", this, token)
 
     if (block) update.await()
 
@@ -95,30 +97,22 @@ suspend fun updateOwner(
         prevUid: String?,
         newValue: (DocumentReference) -> Any
 ) = refs.map { ref ->
-    FirebaseFunctions.getInstance()
-            .getHttpsCallable("updateOwners")
+    Firebase.functions
+            .getHttpsCallable("clientApi")
             .call(mapOf(
+                    "operation" to "update-owners",
                     FIRESTORE_TOKEN to token,
                     FIRESTORE_REF to ref.path,
                     FIRESTORE_PREV_UID to prevUid,
-                    run {
-                        val value = newValue(ref)
-                        when (value) {
-                            is Number -> FIRESTORE_NUMBER to value
-                            is Date -> FIRESTORE_TIMESTAMP to value.time
-                            else -> error("Unknown data type (${value.javaClass}): $value")
-                        }
+                    when (val value = newValue(ref)) {
+                        is Number -> FIRESTORE_NUMBER to value
+                        is Date -> FIRESTORE_TIMESTAMP to value.time
+                        else -> error("Unknown data type (${value.javaClass}): $value")
                     }
             ))
-            .addOnFailureListener {
-                if (it is FirebaseFunctionsException) {
-                    logCrashLog("Functions failed (${it.code}) with details: ${it.details}")
-                }
-            }
-            .logFailures(ref, "Token: $token, from user: $prevUid")
-}.forEach {
-    it.await()
-}
+            .logFailures("updateOwner", ref, "Token: $token, from user: $prevUid")
+            .asDeferred()
+}.awaitAll()
 
 private inline fun <T> List<T>.generateUrl(
         linkBase: String,
@@ -138,5 +132,3 @@ private inline fun <T> List<T>.generateUrl(
 
 private fun Uri.Builder.encodeToken(token: String?): Uri.Builder =
         token?.let { appendQueryParameter(FIRESTORE_ACTIVE_TOKENS, it) } ?: this
-
-private fun generateToken() = FirebaseFirestore.getInstance().collection("null").document().id

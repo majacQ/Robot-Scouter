@@ -1,14 +1,17 @@
 package com.supercilex.robotscouter.core.ui
 
 import android.animation.Animator
-import android.animation.AnimatorListenerAdapter
 import android.animation.ArgbEvaluator
 import android.animation.TimeInterpolator
+import android.animation.TypeEvaluator
 import android.animation.ValueAnimator
 import android.os.Build
 import android.view.View
 import android.view.ViewAnimationUtils
+import androidx.annotation.ColorInt
 import androidx.annotation.ColorRes
+import androidx.core.animation.doOnEnd
+import androidx.core.animation.doOnStart
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.isGone
@@ -20,6 +23,9 @@ import com.supercilex.robotscouter.core.RobotScouter
 val shortAnimationDuration by lazy {
     RobotScouter.resources.getInteger(android.R.integer.config_shortAnimTime).toLong()
 }
+val transitionAnimationDuration by lazy {
+    RobotScouter.resources.getInteger(R.integer.transition_anim_time).toLong()
+}
 val mediumAnimationDuration by lazy {
     RobotScouter.resources.getInteger(android.R.integer.config_mediumAnimTime).toLong()
 }
@@ -27,12 +33,26 @@ val mediumAnimationDuration by lazy {
 fun animateColorChange(
         @ColorRes from: Int,
         @ColorRes to: Int,
-        listener: ValueAnimator.AnimatorUpdateListener
+        listener: (ValueAnimator) -> Unit
+) = animateRawColorChange(
+        ContextCompat.getColor(RobotScouter, from),
+        ContextCompat.getColor(RobotScouter, to),
+        listener
+)
+
+fun animateRawColorChange(
+        @ColorInt from: Int,
+        @ColorInt to: Int,
+        listener: (ValueAnimator) -> Unit
+) = animateChange(ArgbEvaluator(), from, to, listener)
+
+fun <T> animateChange(
+        evaluator: TypeEvaluator<T>,
+        from: T,
+        to: T,
+        listener: (ValueAnimator) -> Unit
 ) {
-    ValueAnimator.ofObject(
-            ArgbEvaluator(),
-            ContextCompat.getColor(RobotScouter, from),
-            ContextCompat.getColor(RobotScouter, to)).apply {
+    ValueAnimator.ofObject(evaluator, from, to).apply {
         addUpdateListener(listener)
         start()
     }
@@ -44,7 +64,7 @@ fun View.animateCircularReveal(
         centerY: Int,
         radius: Float
 ): Animator? = getRevealAnimation(visible) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+    if (Build.VERSION.SDK_INT < 21) {
         isVisible = visible
         return@getRevealAnimation null
     }
@@ -57,15 +77,8 @@ fun View.animateCircularReveal(
             if (visible) radius else 0f
     )
 
-    anim.addListener(object : AnimatorListenerAdapter() {
-        override fun onAnimationStart(animation: Animator?) {
-            if (visible) isVisible = true
-        }
-
-        override fun onAnimationEnd(animation: Animator) {
-            if (!visible) isVisible = false
-        }
-    })
+    if (visible) anim.doOnStart { isVisible = true }
+    if (!visible) anim.doOnEnd { isVisible = false }
 
     anim
 }
@@ -88,7 +101,7 @@ fun View.animatePopReveal(
             .alpha(if (visible) 1f else 0f)
             .setDuration(shortAnimationDuration)
             // TODO sadly, LookupTableInterpolator is package private in Java which makes Kotlin
-            // throw an IllegalAccessError. See https://youtrack.jetbrains.com/issue/KT-15315.
+            //  throw an IllegalAccessError. See https://youtrack.jetbrains.com/issue/KT-15315.
             .setInterpolator(@Suppress("USELESS_CAST") if (visible) {
                 LinearOutSlowInInterpolator() as Any
             } else {

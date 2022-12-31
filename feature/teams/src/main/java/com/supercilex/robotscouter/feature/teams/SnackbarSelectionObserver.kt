@@ -4,13 +4,21 @@ import android.view.View
 import androidx.recyclerview.selection.SelectionTracker
 import com.firebase.ui.firestore.ObservableSnapshotArray
 import com.google.android.material.snackbar.Snackbar
+import com.supercilex.robotscouter.core.ui.AllChangesSelectionObserver
 
 internal class SnackbarSelectionObserver(
         private val rootView: View,
         private val tracker: SelectionTracker<String>,
         private val items: ObservableSnapshotArray<*>
 ) : AllChangesSelectionObserver<String>() {
-    private var selectAllSnackbar = snackbar()
+    private var _selectAllSnackbar: Snackbar? = null
+    private var selectAllSnackbar: Snackbar
+        get() {
+            return _selectAllSnackbar ?: snackbar().also { _selectAllSnackbar = it }
+        }
+        set(value) {
+            _selectAllSnackbar = value
+        }
 
     override fun onSelectionChanged() {
         val isSnackbarShown = selectAllSnackbar.isShown
@@ -26,7 +34,7 @@ internal class SnackbarSelectionObserver(
     }
 
     private fun snackbar(): Snackbar = Snackbar.make(
-            checkNotNull(rootView),
+            rootView,
             R.string.team_multiple_selected_message,
             Snackbar.LENGTH_INDEFINITE
     ).setAction(R.string.team_select_all_title) {

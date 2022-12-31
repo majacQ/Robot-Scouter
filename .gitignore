@@ -1,16 +1,14 @@
 *.iml
 .gradle
 .idea/*
-!.idea/codeStyles
 build
+!**/src/**/build
 node_modules
+.firebase
 /local.properties
 
 *keystore.properties
 google-*.json
 *.jks
 config.xml
-!travis-dummies/keystore.properties
-!travis-dummies/google-*.json
-!travis-dummies/*.jks
-!travis-dummies/config.xml
+!ci-dummies/*.*

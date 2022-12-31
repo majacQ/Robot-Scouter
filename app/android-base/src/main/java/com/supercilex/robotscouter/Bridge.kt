@@ -1,7 +1,11 @@
 package com.supercilex.robotscouter
 
+import android.Manifest
+import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.widget.ProgressBar
 import androidx.annotation.Size
 import androidx.core.view.isVisible
@@ -10,7 +14,6 @@ import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModel
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.TaskCompletionSource
@@ -23,40 +26,56 @@ import com.google.android.play.core.splitinstall.SplitInstallSessionState
 import com.google.android.play.core.splitinstall.SplitInstallStateUpdatedListener
 import com.google.android.play.core.splitinstall.model.SplitInstallErrorCode
 import com.google.android.play.core.splitinstall.model.SplitInstallSessionStatus
+import com.supercilex.robotscouter.core.InvocationMarker
 import com.supercilex.robotscouter.core.RobotScouter
 import com.supercilex.robotscouter.core.ValueSeeker
 import com.supercilex.robotscouter.core._globalContext
-import com.supercilex.robotscouter.core.asTask
-import com.supercilex.robotscouter.core.await
 import com.supercilex.robotscouter.core.data.SingleLiveEvent
 import com.supercilex.robotscouter.core.fastAddOnSuccessListener
+import com.supercilex.robotscouter.core.longToast
+import com.supercilex.robotscouter.core.mainHandler
 import com.supercilex.robotscouter.core.model.Team
+import com.supercilex.robotscouter.core.toast
 import com.supercilex.robotscouter.core.ui.ActivityBase
-import com.supercilex.robotscouter.shared.PermissionRequestHandler
-import kotlinx.coroutines.experimental.CancellationException
-import kotlinx.coroutines.experimental.async
-import org.jetbrains.anko.longToast
-import org.jetbrains.anko.runOnUiThread
-import org.jetbrains.anko.toast
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.tasks.asTask
+import kotlinx.coroutines.tasks.await
 import java.lang.reflect.Modifier
-import kotlin.coroutines.experimental.Continuation
-import kotlin.coroutines.experimental.suspendCoroutine
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
 import com.google.android.play.core.tasks.Task as PlayTask
 
 private val moduleStatus = MutableLiveData<SplitInstallSessionState?>()
 
+fun Context.home() = Intent(this, HomeActivity::class.java)
+
+internal fun initBridges() {
+    TeamListFragmentCompanion()
+    IntegratedScoutListFragmentCompanion()
+    AutoScoutFragmentCompanion()
+    TemplateListFragmentCompanion()
+    NewTeamDialogCompanion()
+    ScoutListActivityCompanion()
+    TrashActivityCompanion()
+    SettingsActivityCompanion()
+}
+
 internal fun ActivityBase.handleModuleInstalls(
         progressBar: ProgressBar
-) = moduleStatus.observe(this, Observer { state ->
+) = moduleStatus.observe(this) { state ->
     if (state == null) {
         progressBar.isVisible = false
-        return@Observer
+        return@observe
     }
 
     state.resolutionIntent()?.let {
         startIntentSender(it.intentSender, null, 0, 0, 0)
         moduleStatus.value = null
-        return@Observer
+        return@observe
     }
 
     progressBar.apply {
@@ -69,7 +88,12 @@ internal fun ActivityBase.handleModuleInstalls(
 
         if (isVisible) bringToFront()
     }
-})
+}.let { Unit }
+
+internal fun <T> PlayTask<T>.asRealTask() = TaskCompletionSource<T>().apply {
+    addOnSuccessListener { setResult(it) }
+    addOnFailureListener { setException(it) }
+}.task
 
 interface SelectedTeamsRetriever {
     val selectedTeams: List<Team>
@@ -118,6 +142,10 @@ interface TeamListFragmentCompanion : InstalledBridgeCompanion {
     }
 }
 
+interface TeamSelectionListener {
+    fun onTeamSelected(args: Bundle, transitionView: View? = null)
+}
+
 interface NewTeamDialogCompanion : InstalledBridgeCompanion {
     fun show(manager: FragmentManager)
 
@@ -136,30 +164,40 @@ interface AutoScoutFragmentCompanion : InstalledBridgeCompanion {
         const val TAG = "AutoScoutFragment"
         override val moduleName = "autoscout"
 
-        // TODO change to `requireClass`; https://issuetracker.google.com/issues/111017400
         override val instance =
-                Class.forName("com.supercilex.robotscouter.feature.autoscout.AutoScoutFragment")
+                requireClass("com.supercilex.robotscouter.feature.autoscout.AutoScoutFragment")
                         .get<AutoScoutFragmentCompanion>()
     }
 }
 
-interface TabletScoutListFragmentCompanion : InstalledBridgeCompanion {
+interface ScoutListFragmentCompanionBase : InstalledBridgeCompanion {
     fun newInstance(args: Bundle): Fragment
 
+    companion object {
+        const val TAG = "ScoutListFragment"
+    }
+}
+
+interface TabletScoutListFragmentCompanion : ScoutListFragmentCompanionBase {
     companion object : InstalledBridgeFinderCompanion<TabletScoutListFragmentCompanion>() {
-        const val TAG = "TabletScoutListFrag"
         override val moduleName = "scouts"
 
         override val instance =
-                requireClass("com.supercilex.robotscouter.feature.scouts.TabletScoutListFragment")
+                requireClass("com.supercilex.robotscouter.feature.scouts.TabletScoutListContainer")
                         .get<TabletScoutListFragmentCompanion>()
     }
 }
 
-interface TabletScoutListFragmentBridge {
-    fun addScoutWithSelector()
+interface IntegratedScoutListFragmentCompanion : ScoutListFragmentCompanionBase {
+    fun getInstance(manager: FragmentManager): Fragment?
 
-    fun showTeamDetails()
+    companion object : InstalledBridgeFinderCompanion<IntegratedScoutListFragmentCompanion>() {
+        override val moduleName = "scouts"
+
+        override val instance =
+                requireClass("com.supercilex.robotscouter.feature.scouts.IntegratedScoutListFragment")
+                        .get<IntegratedScoutListFragmentCompanion>()
+    }
 }
 
 interface ScoutListActivityCompanion : InstalledBridgeCompanion {
@@ -173,27 +211,16 @@ interface ScoutListActivityCompanion : InstalledBridgeCompanion {
     }
 }
 
-interface TemplateListActivityCompanion : DownloadableBridgeCompanion {
-    fun createIntent(templateId: String? = null): Intent
+interface TemplateListFragmentCompanion : InstalledBridgeCompanion {
+    fun getInstance(manager: FragmentManager, args: Bundle? = null): Fragment
 
-    companion object : DownloadableBridgeFinderCompanion<TemplateListActivityCompanion>() {
+    companion object : InstalledBridgeFinderCompanion<TemplateListFragmentCompanion>() {
+        const val TAG = "TemplateListFragment"
         override val moduleName = "templates"
-        override val instance by ValueSeeker {
-            getClass("com.supercilex.robotscouter.feature.templates.TemplateListActivity")
-                    ?.get<TemplateListActivityCompanion>()
-        }
-    }
-}
 
-interface SettingsActivityCompanion : DownloadableBridgeCompanion {
-    fun createIntent(): Intent
-
-    companion object : DownloadableBridgeFinderCompanion<SettingsActivityCompanion>() {
-        override val moduleName = "settings"
-        override val instance by ValueSeeker {
-            getClass("com.supercilex.robotscouter.feature.settings.SettingsActivity")
-                    ?.get<SettingsActivityCompanion>()
-        }
+        override val instance =
+                requireClass("com.supercilex.robotscouter.feature.templates.TemplateListFragment")
+                        .get<TemplateListFragmentCompanion>()
     }
 }
 
@@ -201,7 +228,6 @@ interface ExportServiceCompanion : DownloadableBridgeCompanion {
     /** @return true if an export was attempted, false otherwise */
     fun exportAndShareSpreadSheet(
             activity: FragmentActivity,
-            permHandler: PermissionRequestHandler,
             @Size(min = 1) teams: List<Team>
     ): Boolean
 
@@ -211,22 +237,53 @@ interface ExportServiceCompanion : DownloadableBridgeCompanion {
             getClass("com.supercilex.robotscouter.feature.exports.ExportService")
                     ?.get<ExportServiceCompanion>()
         }
+
+        private val _perms = if (Build.VERSION.SDK_INT >= 29) {
+            arrayOf()
+        } else {
+            arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+        val perms get() = _perms.copyOf()
+
+        const val PERMS_RC = 3383
     }
 }
 
-abstract class InstalledBridgeFinderCompanion<T : InstalledBridgeCompanion>
-    : BridgeFinderCompanion {
+interface TrashActivityCompanion : InstalledBridgeCompanion {
+    fun createIntent(): Intent
+
+    companion object : InstalledBridgeFinderCompanion<TrashActivityCompanion>() {
+        override val moduleName = "trash"
+        override val instance =
+                requireClass("com.supercilex.robotscouter.feature.trash.TrashActivity")
+                        .get<TrashActivityCompanion>()
+    }
+}
+
+interface SettingsActivityCompanion : InstalledBridgeCompanion {
+    fun createIntent(): Intent
+
+    companion object : InstalledBridgeFinderCompanion<SettingsActivityCompanion>() {
+        override val moduleName = "settings"
+        override val instance =
+                requireClass("com.supercilex.robotscouter.feature.settings.SettingsActivity")
+                        .get<SettingsActivityCompanion>()
+    }
+}
+
+abstract class InstalledBridgeFinderCompanion<T : InstalledBridgeCompanion> :
+        BridgeFinderCompanion {
     abstract val instance: T
 
     operator fun invoke() = instance
 }
 
-abstract class DownloadableBridgeFinderCompanion<T : DownloadableBridgeCompanion>
-    : BridgeFinderCompanion {
+abstract class DownloadableBridgeFinderCompanion<T : DownloadableBridgeCompanion> :
+        BridgeFinderCompanion {
     abstract val instance: T?
 
     operator fun invoke(): Task<T> {
-        return instance?.let { Tasks.forResult(it) } ?: async {
+        return instance?.let { Tasks.forResult(it) } ?: GlobalScope.async {
             val existingRequests = manager.sessionStates.await().filter {
                 it.moduleNames().contains(moduleName)
             }
@@ -238,16 +295,20 @@ abstract class DownloadableBridgeFinderCompanion<T : DownloadableBridgeCompanion
                 } catch (e: Exception) {
                     val isNetworkError = e is SplitInstallException &&
                             e.errorCode == SplitInstallErrorCode.NETWORK_ERROR
-                    RobotScouter.runOnUiThread {
-                        if (isNetworkError) toast(R.string.no_connection) else toast(R.string.error_unknown)
+                    mainHandler.post {
+                        if (isNetworkError) {
+                            toast(R.string.no_connection)
+                        } else {
+                            toast(R.string.error_unknown)
+                        }
                     }
-                    throw if (isNetworkError) CancellationException() else e
+                    throw if (isNetworkError) CancellationException() else InvocationMarker(e)
                 }
             } else {
                 existingRequests.first().sessionId()
             }
 
-            RobotScouter.runOnUiThread { longToast(R.string.installing_module) }
+            mainHandler.post { longToast(R.string.installing_module) }
             suspendCoroutine { c: Continuation<T> ->
                 manager.registerListener(object : SplitInstallStateUpdatedListener {
                     override fun onStateUpdate(state: SplitInstallSessionState) {
@@ -273,7 +334,7 @@ abstract class DownloadableBridgeFinderCompanion<T : DownloadableBridgeCompanion
                         cleanup()
                         val instance = instance
                         if (instance == null) {
-                            RobotScouter.runOnUiThread { toast(R.string.error_unknown) }
+                            mainHandler.post { toast(R.string.error_unknown) }
                             c.resumeWithException(IllegalStateException(
                                     "Module should be installed, but classpath is unavailable."))
                         } else {
@@ -285,7 +346,7 @@ abstract class DownloadableBridgeFinderCompanion<T : DownloadableBridgeCompanion
 
                     private fun failure(e: Exception) {
                         cleanup()
-                        RobotScouter.runOnUiThread { toast(R.string.error_unknown) }
+                        mainHandler.post { toast(R.string.error_unknown) }
                         c.resumeWithException(e)
                     }
 
@@ -303,11 +364,6 @@ abstract class DownloadableBridgeFinderCompanion<T : DownloadableBridgeCompanion
     }
 
     private suspend fun <T> PlayTask<T>.await() = asRealTask().await()
-
-    private fun <T> PlayTask<T>.asRealTask() = TaskCompletionSource<T>().apply {
-        addOnSuccessListener { setResult(it) }
-        addOnFailureListener { setException(it) }
-    }.task
 
     private companion object {
         val manager: SplitInstallManager = SplitInstallManagerFactory.create(RobotScouter)

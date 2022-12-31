@@ -3,7 +3,6 @@ package com.supercilex.robotscouter.shared
 import android.app.Dialog
 import android.graphics.Canvas
 import android.graphics.Rect
-import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -13,8 +12,7 @@ import android.widget.TextView
 import androidx.annotation.CallSuper
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.widget.TextViewCompat
-import androidx.lifecycle.ViewModelProviders
-import androidx.lifecycle.get
+import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -33,10 +31,8 @@ import com.supercilex.robotscouter.core.unsafeLazy
 import kotlinx.android.synthetic.main.dialog_template_selector.*
 import kotlin.math.roundToInt
 
-open class TemplateSelectorDialog : BottomSheetDialogFragmentBase() {
-    private val holder: ScoutsHolder by unsafeLazy {
-        ViewModelProviders.of(this).get<ScoutsHolder>()
-    }
+abstract class TemplateSelectorDialog : BottomSheetDialogFragmentBase() {
+    private val holder by viewModels<ScoutsHolder>()
 
     override val containerView: View by unsafeLazy {
         View.inflate(context, R.layout.dialog_template_selector, null)
@@ -90,16 +86,11 @@ open class TemplateSelectorDialog : BottomSheetDialogFragmentBase() {
     override fun onDialogCreated(dialog: Dialog, savedInstanceState: Bundle?) {
         progress.show()
 
-        templatesView.layoutManager = LinearLayoutManager(context)
         templatesView.adapter = adapter
         templatesView.addItemDecoration(object : DividerItemDecoration(
                 context,
                 DividerItemDecoration.VERTICAL
         ) {
-            private val divider = DividerItemDecoration::class.java
-                    .getDeclaredField("mDivider")
-                    .apply { isAccessible = true }
-                    .get(this) as Drawable
             private val bounds = Rect()
 
             override fun onDraw(c: Canvas, parent: RecyclerView, state: RecyclerView.State) {
@@ -109,7 +100,7 @@ open class TemplateSelectorDialog : BottomSheetDialogFragmentBase() {
 
                 val left: Int
                 val right: Int
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && parent.clipToPadding) {
+                if (Build.VERSION.SDK_INT >= 21 && parent.clipToPadding) {
                     left = parent.paddingLeft
                     right = parent.width - parent.paddingRight
                     c.clipRect(left, parent.paddingTop, right, parent.height - parent.paddingBottom)
@@ -123,6 +114,7 @@ open class TemplateSelectorDialog : BottomSheetDialogFragmentBase() {
                         parent.getChildAt(1 - (templatesView.layoutManager as LinearLayoutManager)
                                 .findFirstVisibleItemPosition()) ?: return
                 parent.getDecoratedBoundsWithMargins(child, bounds)
+                val divider = checkNotNull(drawable)
                 val bottom = bounds.bottom + child.translationY.roundToInt()
                 val top = bottom - divider.intrinsicHeight
                 divider.setBounds(left, top, right, bottom)
@@ -142,6 +134,11 @@ open class TemplateSelectorDialog : BottomSheetDialogFragmentBase() {
             View.OnClickListener {
         private lateinit var listener: TemplateSelectorDialog
         private lateinit var id: String
+
+        init {
+            itemView as TextView
+            if (Build.VERSION.SDK_INT >= 17) itemView.textDirection = View.TEXT_DIRECTION_LOCALE
+        }
 
         fun bind(listener: TemplateSelectorDialog, scout: Scout, id: String) {
             this.listener = listener

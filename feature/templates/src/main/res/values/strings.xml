@@ -11,9 +11,9 @@
 
     <string name="template_share_title">Share the %s template</string>
     <string name="template_share_message">
-        You’re invited to edit the %s template with me in Robot Scouter!
+        Join me in building the %s template with me in Robot Scouter!
     </string>
-    <string name="template_share_cta">Import the %s scouting template into Robot Scouter</string>
+    <string name="template_share_cta">Import the %s template into Robot Scouter</string>
 
     <string name="template_move_cancelled_rationale">
         Move cancelled: another user updated the template while you were reordering items.
@@ -44,10 +44,9 @@
     <string name="metric_spinner_item_default_required_error">Default item required</string>
 
     <string name="template_remove_metrics_title">Remove all metrics</string>
-    <string name="template_delete_title">Delete template</string>
     <string name="template_delete_dialog_title">Delete template?</string>
     <string name="template_delete_message">
-        This template will be permanently removed and all teams using it will instead begin using
+        This template will be moved to the Trash and all teams using it will instead begin using
         the default template for future scouts. Any existing scouts won’t be affected.
     </string>
 

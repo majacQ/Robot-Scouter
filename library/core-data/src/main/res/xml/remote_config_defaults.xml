@@ -4,17 +4,14 @@
         <key>minimum_app_version</key>
         <value>-1</value>
     </entry>
-    <entry>
-        <key>update_required_message</key>
-        <value>An update is required for Robot Scouter to work correctly.</value>
-    </entry>
-    <entry>
-        <key>team_freshness</key>
-        <value>4</value>
-    </entry>
 
     <entry>
         <key>show_rating_dialog</key>
         <value>true</value>
+    </entry>
+
+    <entry>
+        <key>enable_auto_scout</key>
+        <value>false</value>
     </entry>
 </defaultsMap>

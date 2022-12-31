@@ -2,20 +2,20 @@ package com.supercilex.robotscouter.feature.exports
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
-import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.supercilex.robotscouter.common.isSingleton
 import com.supercilex.robotscouter.core.LateinitVal
 import com.supercilex.robotscouter.core.data.EXPORT_CHANNEL
 import com.supercilex.robotscouter.core.data.EXPORT_IN_PROGRESS_CHANNEL
 import com.supercilex.robotscouter.core.data.FilteringNotificationManager
-import com.supercilex.robotscouter.core.data.MIME_TYPE_ANY
 import com.supercilex.robotscouter.core.data.model.getNames
 import com.supercilex.robotscouter.core.data.notificationManager
 import com.supercilex.robotscouter.core.model.Team
-import kotlinx.coroutines.experimental.CancellationException
+import com.supercilex.robotscouter.core.ui.colorPrimary
+import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
@@ -32,14 +32,14 @@ internal class ExportNotificationManager(private val service: ExportService) {
                 .setGroup(transientGroupId.toString())
                 .setGroupSummary(true)
                 .setContentTitle(service.getString(R.string.export_overall_progress_title))
-                .setColor(ContextCompat.getColor(service, RC.color.colorPrimary))
+                .setColor(colorPrimary)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
     private val exportNotification: NotificationCompat.Builder
         get() = NotificationCompat.Builder(service, EXPORT_IN_PROGRESS_CHANNEL)
                 .setGroup(transientGroupId.toString())
                 .setContentTitle(service.getString(R.string.export_progress_title))
                 .setSmallIcon(android.R.drawable.stat_sys_upload)
-                .setColor(ContextCompat.getColor(service, RC.color.colorPrimary))
+                .setColor(colorPrimary)
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
 
@@ -164,7 +164,9 @@ internal class ExportNotificationManager(private val service: ExportService) {
         notificationFilter.notify(
                 id, notification.setGroup(permanentGroupId.toString()).build(), true)
 
-        if (pendingTaskCount == nTemplates) showExportedPermanentNotification()
+        if (pendingTaskCount == nTemplates && Build.VERSION.SDK_INT >= 24) {
+            showExportedPermanentNotification()
+        }
 
         if (--pendingTaskCount == 0) {
             stop()
@@ -195,6 +197,7 @@ internal class ExportNotificationManager(private val service: ExportService) {
     fun abort() {
         notificationFilter.stopNow()
         for ((_, holder) in exporters) notificationManager.cancel(holder.id)
+        exportFolder?.deleteRecursively()
         ServiceCompat.stopForeground(service, ServiceCompat.STOP_FOREGROUND_REMOVE)
     }
 
@@ -226,7 +229,7 @@ internal class ExportNotificationManager(private val service: ExportService) {
                             .setDataAndType(exportFolder, MIME_TYPE_FOLDER)
 
                     val openIntent = if (intent.resolveActivity(service.packageManager) == null) {
-                        intent.setDataAndType(exportFolder, MIME_TYPE_ANY)
+                        intent.setDataAndType(exportFolder, "*/*")
                         Intent.createChooser(
                                 intent, service.getString(R.string.export_browse_title))
                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

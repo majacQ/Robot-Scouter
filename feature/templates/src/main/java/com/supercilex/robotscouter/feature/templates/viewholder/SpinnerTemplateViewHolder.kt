@@ -5,15 +5,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageView
-import androidx.fragment.app.FragmentActivity
 import androidx.recyclerview.widget.ItemTouchHelper
-import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.supercilex.robotscouter.core.LateinitVal
-import com.supercilex.robotscouter.core.data.firestoreBatch
 import com.supercilex.robotscouter.core.data.model.update
 import com.supercilex.robotscouter.core.data.model.updateSelectedValueId
-import com.supercilex.robotscouter.core.logFailures
 import com.supercilex.robotscouter.core.model.Metric
 import com.supercilex.robotscouter.core.ui.RecyclerPoolHolder
 import com.supercilex.robotscouter.core.ui.getDrawableCompat
@@ -24,18 +20,19 @@ import com.supercilex.robotscouter.core.ui.snackbar
 import com.supercilex.robotscouter.core.ui.swap
 import com.supercilex.robotscouter.core.unsafeLazy
 import com.supercilex.robotscouter.feature.templates.R
+import com.supercilex.robotscouter.shared.scouting.MetricListFragment
 import com.supercilex.robotscouter.shared.scouting.MetricViewHolderBase
 import kotlinx.android.extensions.LayoutContainer
 import kotlinx.android.synthetic.main.scout_template_base_reorder.*
 import kotlinx.android.synthetic.main.scout_template_spinner.*
 import kotlinx.android.synthetic.main.scout_template_spinner_item.*
-import org.jetbrains.anko.find
 import java.util.Collections
 import kotlin.properties.Delegates
 import com.supercilex.robotscouter.R as RC
 
 internal class SpinnerTemplateViewHolder(
-        itemView: View
+        itemView: View,
+        fragment: MetricListFragment
 ) : MetricViewHolderBase<Metric.List, List<Metric.List.Item>>(itemView),
         MetricTemplateViewHolder<Metric.List, List<Metric.List.Item>>, View.OnClickListener {
     override val reorderView: ImageView by unsafeLazy { reorder }
@@ -48,12 +45,9 @@ internal class SpinnerTemplateViewHolder(
 
         newItem.setOnClickListener(this)
 
-        items.layoutManager = LinearLayoutManager(itemView.context)
         items.adapter = itemsAdapter
-        items.setRecycledViewPool((itemView.context as FragmentActivity).supportFragmentManager
-                                          .fragments
-                                          .filterIsInstance<RecyclerPoolHolder>()
-                                          .single().recyclerPool)
+        items.setRecycledViewPool(
+                (fragment.requireParentFragment() as RecyclerPoolHolder).recyclerPool)
         val itemTouchHelper = ItemTouchHelper(itemTouchCallback)
         itemTouchCallback.itemTouchHelper = itemTouchHelper
         itemTouchHelper.attachToRecyclerView(items)
@@ -106,7 +100,7 @@ internal class SpinnerTemplateViewHolder(
     ) : RecyclerView.ViewHolder(containerView), LayoutContainer,
             TemplateViewHolder, View.OnClickListener {
         override val reorderView: ImageView by unsafeLazy { reorder }
-        override val nameEditor: EditText = itemView.find(RC.id.name)
+        override val nameEditor: EditText = itemView.findViewById(RC.id.name)
 
         private lateinit var parent: SpinnerTemplateViewHolder
         private lateinit var item: Metric.List.Item
@@ -130,25 +124,22 @@ internal class SpinnerTemplateViewHolder(
 
         override fun onClick(v: View) {
             val items = parent.getLatestItems()
-            when (v.id) {
+            when (val id = v.id) {
                 R.id.defaultView -> updateDefaultStatus(items)
                 R.id.delete -> delete(items)
-                else -> error("Unknown id: ${v.id}")
+                else -> error("Unknown id: $id")
             }
         }
 
         private fun updateDefaultStatus(items: List<Metric.List.Item>) {
             if (isDefault) {
-                snackbar(itemView, R.string.metric_spinner_item_default_required_error)
+                itemView.snackbar(R.string.metric_spinner_item_default_required_error)
                 return
             }
 
             val metric = parent.metric
             val oldDefaultId = metric.selectedValueId
-            firestoreBatch {
-                metric.updateSelectedValueId(item.id)
-                metric.update(items, this)
-            }.logFailures()
+            metric.updateSelectedValueId(item.id)
             parent.items.notifyItemsNoChangeAnimation {
                 parent.items.setHasFixedSize(true)
                 notifyItemChanged(items.indexOfFirst { it.id == oldDefaultId }.let {
@@ -161,14 +152,16 @@ internal class SpinnerTemplateViewHolder(
 
         private fun delete(items: List<Metric.List.Item>) {
             val position = items.indexOfFirst { it.id == item.id }
+            if (position == -1) return
             parent.metric.update(items.toMutableList().apply {
                 removeAt(position)
             })
             parent.itemsAdapter.notifyItemRemoved(position)
 
-            longSnackbar(itemView, RC.string.deleted, RC.string.undo) {
+            itemView.longSnackbar(RC.string.deleted, RC.string.undo) {
                 parent.metric.update(parent.metric.value.toMutableList().apply {
-                    add(position, items[position])
+                    val item = items[position]
+                    if (position <= size) add(position, item) else add(item)
                 })
                 parent.itemsAdapter.notifyItemInserted(position)
             }
@@ -178,10 +171,8 @@ internal class SpinnerTemplateViewHolder(
             val metric = parent.metric
             if (
                 !hasFocus && v === nameEditor && adapterPosition != -1 &&
-                metric.value.find { it.id == item.id } != null
-            ) {
-                metric.update(getUpdatedItems(metric.value))
-            }
+                metric.value.any { it.id == item.id }
+            ) metric.update(getUpdatedItems(metric.value))
         }
 
         fun getUpdatedItems(
@@ -199,7 +190,7 @@ internal class SpinnerTemplateViewHolder(
     ) {
         var itemTouchHelper: ItemTouchHelper by LateinitVal()
         var pendingScrollPosition: Int = RecyclerView.NO_POSITION
-        private var localItems: List<Metric.List.Item>? = null
+        private var localItems: MutableList<Metric.List.Item>? = null
 
         fun getItem(position: Int): Metric.List.Item =
                 if (localItems == null) metric.value[position] else checkNotNull(localItems)[position]
@@ -218,8 +209,14 @@ internal class SpinnerTemplateViewHolder(
                 viewHolder: RecyclerView.ViewHolder,
                 target: RecyclerView.ViewHolder
         ): Boolean {
+            var localItems = localItems
             if (localItems == null) {
+                // Force a focus on any potential text input to get the most up-to-date data
+                nameEditor.requestFocus()
+                nameEditor.clearFocus()
+
                 localItems = metric.value.toMutableList()
+                this.localItems = localItems
                 items.setHasFixedSize(true)
             }
 

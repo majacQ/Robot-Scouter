@@ -3,57 +3,30 @@ package com.supercilex.robotscouter.core
 import android.app.Activity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
-import com.google.android.gms.tasks.OnSuccessListener
 import com.google.android.gms.tasks.Task
-import com.google.android.gms.tasks.TaskCompletionSource
-import kotlinx.coroutines.experimental.CancellationException
-import kotlinx.coroutines.experimental.Deferred
-import org.jetbrains.anko.coroutines.experimental.Ref
-import org.jetbrains.anko.coroutines.experimental.asReference
-import kotlin.coroutines.experimental.Continuation
-import kotlin.coroutines.experimental.suspendCoroutine
+import kotlinx.coroutines.CancellationException
+import java.lang.ref.WeakReference
+import kotlin.coroutines.intrinsics.intercepted
+import kotlin.coroutines.intrinsics.suspendCoroutineUninterceptedOrReturn
 
-suspend fun <T> Task<T>.await(): T {
-    val trace = generateStackTrace()
-
-    if (isComplete) { // Fast path
-        return if (isSuccessful) result else throw checkNotNull(exception).injectRoot(trace)
-    }
-
-    return suspendCoroutine { c: Continuation<T> ->
-        addOnSuccessListener { c.resume(it) }
-        addOnFailureListener { c.resumeWithException(it.injectRoot(trace)) }
-    }
-}
-
-inline fun <T> Task<T>.fastAddOnSuccessListener(
+fun <T> Task<T>.fastAddOnSuccessListener(
         activity: Activity? = null,
-        crossinline listener: (T) -> Unit
+        listener: (T) -> Unit
 ): Task<T> {
     if (isSuccessful) { // Fast path
-        listener(result)
+        @Suppress("UNCHECKED_CAST") // Let the caller decide nullability
+        listener(result as T)
         return this
     }
 
-    val crossedListener = OnSuccessListener<T> { listener(it) }
     return if (activity == null) {
-        addOnSuccessListener(crossedListener)
+        addOnSuccessListener(listener)
     } else {
-        addOnSuccessListener(activity, crossedListener)
+        addOnSuccessListener(activity, listener)
     }
 }
 
-fun <T> Deferred<T>.asTask(): Task<T> {
-    val source = TaskCompletionSource<T>()
-    invokeOnCompletion {
-        try {
-            source.setResult(getCompleted())
-        } catch (e: Exception) {
-            source.setException(e)
-        }
-    }
-    return source.task
-}
+fun <T : Any> T.asReference() = Ref(this)
 
 fun <T : LifecycleOwner> T.asLifecycleReference(
         minState: Lifecycle.State = Lifecycle.State.STARTED
@@ -72,5 +45,16 @@ class LifecycleOwnerRef<out T : Any>(
     suspend operator fun invoke(): T {
         if (!owner().lifecycle.currentState.isAtLeast(minState)) throw CancellationException()
         return obj()
+    }
+}
+
+class Ref<out T : Any> internal constructor(obj: T) {
+    private val weakRef = WeakReference(obj)
+
+    suspend operator fun invoke(): T {
+        return suspendCoroutineUninterceptedOrReturn {
+            it.intercepted()
+            weakRef.get() ?: throw CancellationException()
+        }
     }
 }

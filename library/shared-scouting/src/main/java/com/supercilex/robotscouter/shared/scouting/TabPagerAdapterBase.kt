@@ -1,43 +1,38 @@
 package com.supercilex.robotscouter.shared.scouting
 
-import android.os.Bundle
 import android.view.View
 import android.widget.LinearLayout
 import androidx.annotation.StringRes
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ViewModelProviders
-import androidx.lifecycle.get
 import androidx.viewpager.widget.PagerAdapter
 import com.google.android.material.tabs.TabLayout
 import com.google.firebase.firestore.CollectionReference
 import com.supercilex.robotscouter.common.isPolynomial
 import com.supercilex.robotscouter.core.data.ChangeEventListenerBase
 import com.supercilex.robotscouter.core.data.ListenerRegistrationLifecycleOwner
-import com.supercilex.robotscouter.core.data.getTabIdBundle
 import com.supercilex.robotscouter.core.data.model.ScoutsHolder
 import com.supercilex.robotscouter.core.model.Scout
-import com.supercilex.robotscouter.core.ui.Saveable
+import com.supercilex.robotscouter.core.ui.LifecycleAwareLazy
+import com.supercilex.robotscouter.core.ui.addViewLifecycleObserver
 import com.supercilex.robotscouter.core.ui.animatePopReveal
 import com.supercilex.robotscouter.core.ui.setOnLongClickListenerCompat
 import com.supercilex.robotscouter.shared.MovableFragmentStatePagerAdapter
-import kotlinx.android.extensions.LayoutContainer
-import org.jetbrains.anko.find
 
 abstract class TabPagerAdapterBase(
         protected val fragment: Fragment,
         private val dataRef: CollectionReference
-) : MovableFragmentStatePagerAdapter(fragment.childFragmentManager), LayoutContainer,
-        Saveable,
-        TabLayout.OnTabSelectedListener, View.OnLongClickListener, DefaultLifecycleObserver,
-        ChangeEventListenerBase {
+) : MovableFragmentStatePagerAdapter(fragment.childFragmentManager), ChangeEventListenerBase,
+        View.OnLongClickListener, TabLayout.OnTabSelectedListener, DefaultLifecycleObserver {
     @get:StringRes protected abstract val editTabNameRes: Int
-    final override val containerView = checkNotNull(fragment.view)
-    private val tabs = containerView.find<TabLayout>(R.id.tabs)
-    private val noTabsHint = containerView.find<View>(R.id.noTabsHint)
+    protected abstract val tabs: TabLayout
+    private val noTabsHint: View by fragment.LifecycleAwareLazy {
+        fragment.requireView().findViewById(R.id.noTabsHint)
+    }
 
-    val holder = ViewModelProviders.of(fragment).get<ScoutsHolder>()
+    val holder by fragment.viewModels<ScoutsHolder>()
     private var oldScouts: List<Scout> = emptyList()
     protected var currentScouts: List<Scout> = emptyList()
 
@@ -52,8 +47,7 @@ abstract class TabPagerAdapterBase(
         get() = tabs.getTabAt(currentScouts.indexOfFirst { it.id == currentTabId })
 
     fun init() {
-        fragment.viewLifecycleOwner.lifecycle.addObserver(this)
-        ListenerRegistrationLifecycleOwner.lifecycle.addObserver(this)
+        fragment.addViewLifecycleObserver(this)
     }
 
     override fun getCount() = currentScouts.size
@@ -67,7 +61,7 @@ abstract class TabPagerAdapterBase(
     override fun getItemId(position: Int) = currentScouts[position].id
 
     override fun onTabSelected(tab: TabLayout.Tab) {
-        _currentTabId = currentScouts[tab.position].id
+        _currentTabId = currentScouts.getOrNull(tab.position)?.id
     }
 
     override fun onDataChanged() {
@@ -104,9 +98,8 @@ abstract class TabPagerAdapterBase(
             if (prevTabId.isNullOrBlank()) {
                 currentTabId = currentScouts.first().id
             } else {
-                currentScouts.find { it.id == prevTabId }?.let {
-                    selectTab(currentScouts.indexOfFirst { it.id == currentTabId })
-                } ?: run {
+                val targetIndex = currentScouts.indexOfFirst { it.id == prevTabId }
+                if (targetIndex == -1) { // Item deleted
                     val index = oldScouts.indexOfFirst { it.id == prevTabId }
                     currentTabId = if (oldScouts.isPolynomial) {
                         (if (oldScouts.lastIndex > index) {
@@ -117,6 +110,8 @@ abstract class TabPagerAdapterBase(
                     } else {
                         null
                     }
+                } else {
+                    selectTab(targetIndex)
                 }
             }
         }
@@ -128,7 +123,7 @@ abstract class TabPagerAdapterBase(
         (0 until tabs.tabCount).map {
             checkNotNull(tabs.getTabAt(it))
         }.forEachIndexed { index, tab ->
-            tab.text = currentScouts[index].name ?: getPageTitle(index)
+            tab.text = currentScouts.getOrNull(index)?.name ?: getPageTitle(index)
 
             val tabView = (tabs.getChildAt(0) as LinearLayout).getChildAt(index)
             tabView.setOnLongClickListenerCompat(this@TabPagerAdapterBase)
@@ -136,10 +131,8 @@ abstract class TabPagerAdapterBase(
         }
     }
 
-    override fun onSaveInstanceState(outState: Bundle) =
-            outState.putAll(getTabIdBundle(currentTabId))
-
     private fun selectTab(index: Int) {
+        val tabs = tabs
         val select: () -> Unit = { tabs.getTabAt(index)?.select() }
 
         // Select the tab twice:
@@ -151,6 +144,10 @@ abstract class TabPagerAdapterBase(
         tabs.post(select)
     }
 
+    override fun onCreate(owner: LifecycleOwner) {
+        ListenerRegistrationLifecycleOwner.lifecycle.addObserver(this)
+    }
+
     override fun onStart(owner: LifecycleOwner) {
         if (owner !== ListenerRegistrationLifecycleOwner) {
             holder.scouts.addChangeEventListener(this)
@@ -159,9 +156,7 @@ abstract class TabPagerAdapterBase(
 
     override fun onStop(owner: LifecycleOwner) {
         if (owner === ListenerRegistrationLifecycleOwner) {
-            oldScouts = emptyList()
-            currentScouts = emptyList()
-            notifyDataSetChanged()
+            reset()
         } else {
             holder.scouts.removeChangeEventListener(this)
         }
@@ -169,6 +164,13 @@ abstract class TabPagerAdapterBase(
 
     override fun onDestroy(owner: LifecycleOwner) {
         ListenerRegistrationLifecycleOwner.lifecycle.removeObserver(this)
+    }
+
+    fun reset() {
+        oldScouts = emptyList()
+        currentScouts = emptyList()
+        if (fragment.view != null) tabs.removeOnTabSelectedListener(this)
+        notifyDataSetChanged()
     }
 
     override fun onLongClick(v: View): Boolean {

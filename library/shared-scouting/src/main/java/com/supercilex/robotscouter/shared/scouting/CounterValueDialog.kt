@@ -1,7 +1,5 @@
 package com.supercilex.robotscouter.shared.scouting
 
-import android.content.DialogInterface
-import android.os.Bundle
 import android.text.InputType
 import androidx.fragment.app.FragmentManager
 import com.google.firebase.firestore.DocumentReference
@@ -17,8 +15,8 @@ internal class CounterValueDialog : ValueDialogBase<Long>() {
     override val title = R.string.scout_edit_counter_value_title
     override val hint = R.string.scout_counter_value_title
 
-    override fun onShow(dialog: DialogInterface, savedInstanceState: Bundle?) {
-        super.onShow(dialog, savedInstanceState)
+    override fun onStart() {
+        super.onStart()
         lastEditText.inputType = InputType.TYPE_CLASS_NUMBER
     }
 
@@ -26,11 +24,11 @@ internal class CounterValueDialog : ValueDialogBase<Long>() {
         val number = try {
             value
         } catch (e: NumberFormatException) {
-            valueLayout.error = getString(R.string.number_too_big_error)
+            requireDialog().valueLayout.error = getString(R.string.number_too_big_error)
             return false
         }
-        val ref = checkNotNull(arguments).getRef()
-        ref.update(FIRESTORE_VALUE, number).logFailures(ref, number)
+        val ref = requireArguments().getRef()
+        ref.update(FIRESTORE_VALUE, number).logFailures("updateCounterValue", ref, number)
         return true
     }
 

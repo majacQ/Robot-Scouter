@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
+import androidx.lifecycle.Lifecycle
 import androidx.viewpager.widget.PagerAdapter
 
 /**
@@ -22,9 +23,10 @@ abstract class MovableFragmentStatePagerAdapter(
     private var currentTransaction: FragmentTransaction? = null
     private var currentPrimaryItem: Fragment? = null
 
-    private val savedStates = LinkedHashMap<String, Fragment.SavedState?>()
     private val fragmentsToItemIds = LinkedHashMap<Fragment, String>()
     private val itemIdsToFragments = LinkedHashMap<String, Fragment>()
+
+    private val savedStates = LinkedHashMap<String, Fragment.SavedState?>()
     private val unusedRestoredFragments = HashSet<Fragment>()
 
     /** @see androidx.fragment.app.FragmentStatePagerAdapter.getItem */
@@ -52,8 +54,6 @@ abstract class MovableFragmentStatePagerAdapter(
             return f
         }
 
-        initTransaction()
-
         val fragment = getItem(position)
         fragmentsToItemIds[fragment] = itemId
         itemIdsToFragments[itemId] = fragment
@@ -62,9 +62,11 @@ abstract class MovableFragmentStatePagerAdapter(
             fragment.setInitialSavedState(it)
         }
         fragment.setMenuVisibility(false)
-        fragment.userVisibleHint = false
 
-        checkNotNull(currentTransaction).add(container.id, fragment)
+        initTransaction().apply {
+            add(container.id, fragment)
+            setMaxLifecycle(fragment, Lifecycle.State.STARTED)
+        }
 
         return fragment
     }
@@ -80,11 +82,12 @@ abstract class MovableFragmentStatePagerAdapter(
         if (fragment !== currentPrimaryItem) {
             currentPrimaryItem?.let {
                 it.setMenuVisibility(false)
-                it.userVisibleHint = false
+                if (it.isAdded) initTransaction().setMaxLifecycle(it, Lifecycle.State.STARTED)
             }
 
             fragment.setMenuVisibility(true)
-            fragment.userVisibleHint = true
+            initTransaction().setMaxLifecycle(fragment, Lifecycle.State.RESUMED)
+
             currentPrimaryItem = fragment
         }
     }
@@ -97,6 +100,8 @@ abstract class MovableFragmentStatePagerAdapter(
         currentTransaction?.let {
             it.commitNowAllowingStateLoss()
             currentTransaction = null
+
+            if (fragmentsToItemIds.isEmpty()) currentPrimaryItem = null
         }
     }
 
@@ -116,54 +121,57 @@ abstract class MovableFragmentStatePagerAdapter(
 
     /** @see androidx.fragment.app.FragmentStatePagerAdapter.restoreState */
     override fun restoreState(state: Parcelable?, loader: ClassLoader?) {
-        if ((state as? Bundle)?.apply { classLoader = loader }?.isEmpty == false) {
-            fragmentsToItemIds.clear()
-            itemIdsToFragments.clear()
-            unusedRestoredFragments.clear()
-            savedStates.clear()
+        if ((state as? Bundle)?.apply { classLoader = loader }?.isEmpty != false) return
 
-            val fragmentIds: List<String> = state.getStringArrayList(KEY_FRAGMENT_IDS)
-            val fragmentStates: List<Fragment.SavedState> =
-                    state.getParcelableArrayList(KEY_FRAGMENT_STATES)
+        fragmentsToItemIds.clear()
+        itemIdsToFragments.clear()
+        unusedRestoredFragments.clear()
+        savedStates.clear()
 
-            for ((index, id) in fragmentIds.withIndex()) {
-                savedStates[id] = fragmentStates[index]
-            }
+        val fragmentIds: List<String> = state.getStringArrayList(KEY_FRAGMENT_IDS).orEmpty()
+        val fragmentStates: List<Fragment.SavedState> =
+                state.getParcelableArrayList<Fragment.SavedState>(KEY_FRAGMENT_STATES).orEmpty()
 
-            for (key: String in state.keySet()) {
-                if (key.startsWith(KEY_FRAGMENT_STATE)) {
-                    val itemId = key.substring(KEY_FRAGMENT_STATE.length)
+        for ((index, id) in fragmentIds.withIndex()) {
+            savedStates[id] = fragmentStates[index]
+        }
 
-                    manager.getFragment(state, key)?.let {
-                        it.setMenuVisibility(false)
-                        fragmentsToItemIds[it] = itemId
-                        itemIdsToFragments[itemId] = it
-                    }
+        for (key: String in state.keySet()) {
+            if (key.startsWith(KEY_FRAGMENT_STATE)) {
+                val itemId = key.substring(KEY_FRAGMENT_STATE.length)
+
+                try {
+                    manager.getFragment(state, key)
+                } catch (e: Exception) {
+                    null
+                }?.let {
+                    it.setMenuVisibility(false)
+                    fragmentsToItemIds[it] = itemId
+                    itemIdsToFragments[itemId] = it
                 }
             }
-
-            unusedRestoredFragments.addAll(fragmentsToItemIds.keys)
         }
+
+        unusedRestoredFragments.addAll(fragmentsToItemIds.keys)
     }
 
     private fun Fragment.destroy() {
-        initTransaction()
-
         val itemId = fragmentsToItemIds.remove(this)
         itemIdsToFragments.remove(itemId)
         if (itemId != null && isAdded) {
             savedStates[itemId] = manager.saveFragmentInstanceState(this)
         }
 
-        checkNotNull(currentTransaction).remove(this)
+        initTransaction().remove(this)
     }
 
-    private fun initTransaction() {
+    private fun initTransaction(): FragmentTransaction {
         if (currentTransaction == null) {
             // We commit the transaction later
             @SuppressLint("CommitTransaction")
             currentTransaction = manager.beginTransaction()
         }
+        return currentTransaction!!
     }
 
     private companion object {

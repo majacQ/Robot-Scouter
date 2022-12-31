@@ -1,47 +1,44 @@
 package com.supercilex.robotscouter.core.data.model
 
-import android.os.Bundle
-import androidx.lifecycle.LiveData
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.distinctUntilChanged
 import com.firebase.ui.common.ChangeEventType
 import com.google.firebase.firestore.DocumentSnapshot
 import com.supercilex.robotscouter.core.data.ChangeEventListenerBase
-import com.supercilex.robotscouter.core.data.UniqueMutableLiveData
+import com.supercilex.robotscouter.core.data.TEAM_KEY
 import com.supercilex.robotscouter.core.data.ViewModelBase
-import com.supercilex.robotscouter.core.data.getTeam
 import com.supercilex.robotscouter.core.data.isSignedIn
 import com.supercilex.robotscouter.core.data.teams
 import com.supercilex.robotscouter.core.data.uid
 import com.supercilex.robotscouter.core.data.waitForChange
-import com.supercilex.robotscouter.core.logFailures
 import com.supercilex.robotscouter.core.model.Team
-import kotlinx.coroutines.experimental.async
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
-class TeamHolder : ViewModelBase<Bundle>(), ChangeEventListenerBase {
-    private val _teamListener = UniqueMutableLiveData<Team?>()
-    val teamListener: LiveData<Team?> = _teamListener
+class TeamHolder(state: SavedStateHandle) : ViewModelBase<Team>(state), ChangeEventListenerBase {
+    private val _teamListener = state.getLiveData<Team?>("$TEAM_KEY:holder")
+    val teamListener = _teamListener.distinctUntilChanged()
 
-    private var called = true
-
-    override fun onCreate(args: Bundle) {
-        val team = args.getTeam()
-        if (isSignedIn && team.owners.contains(uid)) {
-            if (team.id.isBlank()) {
-                async {
+    override fun onCreate(args: Team) {
+        if (isSignedIn && args.owners.contains(uid)) {
+            if (args.id.isBlank()) {
+                GlobalScope.launch(Dispatchers.Main) {
                     for (potentialTeam in teams.waitForChange()) {
-                        if (team.number == potentialTeam.number) {
-                            _teamListener.postValue(potentialTeam.copy())
-                            return@async
+                        if (args.number == potentialTeam.number) {
+                            _teamListener.value = potentialTeam.copy()
+                            return@launch
                         }
                     }
 
-                    team.add()
-                    _teamListener.postValue(team.copy())
-                }.logFailures()
+                    args.add()
+                    _teamListener.value = args.copy()
+                }
             } else {
-                _teamListener.setValue(team)
+                _teamListener.value = args
             }
         } else {
-            _teamListener.setValue(null)
+            _teamListener.value = null
         }
 
         teams.keepAlive = true
@@ -54,25 +51,21 @@ class TeamHolder : ViewModelBase<Bundle>(), ChangeEventListenerBase {
             newIndex: Int,
             oldIndex: Int
     ) {
-        if (teamListener.value?.id != snapshot.id) return
-        called = true
+        if (_teamListener.value?.id != snapshot.id) return
 
         if (type == ChangeEventType.REMOVED) {
-            _teamListener.setValue(null)
+            _teamListener.value = null
             return
         } else if (type == ChangeEventType.MOVED) {
             return
         }
 
-        _teamListener.setValue(teams[newIndex].copy())
+        _teamListener.value = teams[newIndex].copy()
     }
 
     override fun onDataChanged() {
-        if (!called && teams.find { it.id == teamListener.value?.id } == null) {
-            _teamListener.setValue(null)
-        }
-
-        called = false
+        val current = _teamListener.value ?: return
+        if (teams.none { it.id == current.id }) _teamListener.value = null
     }
 
     override fun onCleared() {

@@ -1,7 +1,5 @@
 package com.supercilex.robotscouter.shared.scouting
 
-import android.content.DialogInterface
-import android.os.Bundle
 import android.text.InputType
 import androidx.annotation.StringRes
 import androidx.fragment.app.FragmentManager
@@ -16,17 +14,17 @@ import com.supercilex.robotscouter.core.unsafeLazy
 
 internal class TabNameDialog : ValueDialogBase<String>() {
     override val value get() = lastEditText.text.nullOrFull()?.toString()
-    override val title by unsafeLazy { checkNotNull(arguments).getInt(TITLE_KEY) }
+    override val title by unsafeLazy { requireArguments().getInt(TITLE_KEY) }
     override val hint = R.string.scout_name_title
 
-    override fun onShow(dialog: DialogInterface, savedInstanceState: Bundle?) {
-        super.onShow(dialog, savedInstanceState)
+    override fun onStart() {
+        super.onStart()
         lastEditText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
     }
 
     override fun onAttemptDismiss(): Boolean {
-        val ref = checkNotNull(arguments).getRef()
-        ref.update(FIRESTORE_NAME, value).logFailures(ref, value)
+        val ref = requireArguments().getRef()
+        ref.update(FIRESTORE_NAME, value).logFailures("updateTabName", ref, value)
         return true
     }
 

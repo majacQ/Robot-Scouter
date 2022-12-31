@@ -2,23 +2,18 @@ package com.supercilex.robotscouter.feature.teams
 
 import android.os.Bundle
 import android.view.KeyEvent
-import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
-import android.view.ViewGroup
-import androidx.core.view.isVisible
+import androidx.activity.addCallback
 import androidx.fragment.app.FragmentManager
-import androidx.lifecycle.ViewModelProviders
-import androidx.lifecycle.get
-import androidx.recyclerview.selection.MutableSelection
-import androidx.recyclerview.selection.Selection
+import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.viewModels
 import androidx.recyclerview.selection.SelectionTracker
 import androidx.recyclerview.selection.StorageStrategy
-import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.gms.tasks.TaskCompletionSource
+import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.supercilex.robotscouter.Bridge
 import com.supercilex.robotscouter.Refreshable
@@ -26,70 +21,79 @@ import com.supercilex.robotscouter.SelectedTeamsRetriever
 import com.supercilex.robotscouter.SignInResolver
 import com.supercilex.robotscouter.TeamListFragmentCompanion
 import com.supercilex.robotscouter.TeamListFragmentCompanion.Companion.TAG
+import com.supercilex.robotscouter.TeamSelectionListener
 import com.supercilex.robotscouter.common.FIRESTORE_TEAMS
 import com.supercilex.robotscouter.core.data.TEAM_KEY
 import com.supercilex.robotscouter.core.data.asLiveData
 import com.supercilex.robotscouter.core.data.isSignedIn
-import com.supercilex.robotscouter.core.data.observeNonNull
 import com.supercilex.robotscouter.core.data.teams
 import com.supercilex.robotscouter.core.model.Team
+import com.supercilex.robotscouter.core.ui.AllChangesSelectionObserver
 import com.supercilex.robotscouter.core.ui.FragmentBase
 import com.supercilex.robotscouter.core.ui.KeyboardShortcutListener
-import com.supercilex.robotscouter.core.ui.OnBackPressedListener
-import com.supercilex.robotscouter.core.ui.TeamSelectionListener
+import com.supercilex.robotscouter.core.ui.LifecycleAwareLazy
 import com.supercilex.robotscouter.core.ui.animatePopReveal
+import com.supercilex.robotscouter.core.ui.isInTabletMode
 import com.supercilex.robotscouter.core.ui.notifyItemsNoChangeAnimation
+import com.supercilex.robotscouter.core.ui.onDestroy
 import com.supercilex.robotscouter.core.unsafeLazy
+import com.supercilex.robotscouter.shared.SharedLifecycleResource
+import com.supercilex.robotscouter.shared.TeamDetailsDialog
 import kotlinx.android.synthetic.main.fragment_team_list.*
-import org.jetbrains.anko.find
 import com.supercilex.robotscouter.R as RC
 
 @Bridge
-internal class TeamListFragment : FragmentBase(), TeamSelectionListener, SelectedTeamsRetriever,
-        OnBackPressedListener, KeyboardShortcutListener, Refreshable, View.OnClickListener {
+internal class TeamListFragment : FragmentBase(R.layout.fragment_team_list),
+        TeamSelectionListener, SelectedTeamsRetriever, Refreshable,
+        TeamDetailsDialog.Callback, KeyboardShortcutListener, View.OnClickListener {
     override val selectedTeams: List<Team>
-        get() = if (::adapter.isInitialized) {
-            selectionTracker.selection.map { id -> adapter.snapshots.first { it.id == id } }
-        } else {
+        get() = if (view == null) {
             emptyList()
+        } else {
+            selectionTracker.selection.map { id -> adapter.snapshots.first { it.id == id } }
         }
 
-    private val holder by unsafeLazy {
-        ViewModelProviders.of(this).get<TeamListHolder>()
-                .also { onHolderReadyTask.setResult(it) }
-    }
-    private val onHolderReadyTask = TaskCompletionSource<TeamListHolder>()
-    private val tutorialHelper by unsafeLazy {
-        ViewModelProviders.of(this).get<TutorialHelper>()
-    }
+    private val holder by viewModels<TeamListHolder>()
+    private val tutorialHelper by viewModels<TutorialHelper>()
 
-    private val fab by unsafeLazy { requireActivity().find<FloatingActionButton>(RC.id.fab) }
-    private lateinit var adapter: TeamListAdapter
-    private lateinit var selectionTracker: SelectionTracker<String>
-    private lateinit var menuHelper: TeamMenuHelper
-    private var savedSelection: Selection<String>? = null
+    private val sharedResources by activityViewModels<SharedLifecycleResource>()
+    private val fab: FloatingActionButton by unsafeLazy {
+        requireActivity().findViewById(RC.id.fab)
+    }
+    private val appBar: AppBarLayout by unsafeLazy {
+        requireActivity().findViewById(RC.id.appBar)
+    }
+    private var adapter: TeamListAdapter by LifecycleAwareLazy()
+    private var selectionTracker by LifecycleAwareLazy<SelectionTracker<String>>() onDestroy {
+        savedSelection = Bundle().apply { it.onSaveInstanceState(this) }
+        it.clearSelection() // Reset menu
+    }
+    private var menuHelper: TeamMenuHelper by LifecycleAwareLazy()
+    private var savedSelection: Bundle? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setHasOptionsMenu(true)
+  <<<<<<< snyk-upgrade-8b98c69bb7423e6986ea50fb8b76167d
+        holder.init()
+        tutorialHelper.init()
+  =======
         holder.init(savedInstanceState)
         tutorialHelper.init(null)
 
         registerShortcut(KeyEvent.KEYCODE_N, 0) { onClick(fab) }
     }
+  >>>>>>> shortcuts
 
-    override fun onCreateView(
-            inflater: LayoutInflater,
-            container: ViewGroup?,
-            savedInstanceState: Bundle?
-    ): View = View.inflate(context, R.layout.fragment_team_list, null)
+        if (!requireContext().isInTabletMode()) holder.selectTeam(null)
+    }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        sharedResources.onCreate(fab)
         fab.setOnClickListener(this)
         fab.show()
         showAddTeamTutorial(tutorialHelper, this)
 
-        teamsView.layoutManager = LinearLayoutManager(context)
         teamsView.setHasFixedSize(true)
         teamsView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
@@ -102,15 +106,11 @@ internal class TeamListFragment : FragmentBase(), TeamSelectionListener, Selecte
             }
         })
 
-        adapter = TeamListAdapter(
-                savedInstanceState,
-                this,
-                holder.selectedTeamIdListener
-        )
+        adapter = TeamListAdapter(savedInstanceState, this, holder)
         teamsView.adapter = adapter
 
         selectionTracker = run {
-            SelectionTracker.Builder<String>(
+            SelectionTracker.Builder(
                     FIRESTORE_TEAMS,
                     teamsView,
                     TeamKeyProvider(adapter),
@@ -122,25 +122,35 @@ internal class TeamListFragment : FragmentBase(), TeamSelectionListener, Selecte
                 addObserver(SnackbarSelectionObserver(view, this, adapter.snapshots))
                 addObserver(object : AllChangesSelectionObserver<String>() {
                     override fun onItemStateChanged(key: String, selected: Boolean) {
-                        if (selection.size() <= 1) { // First item added or last one removed
+                        val notify = {
                             teamsView.notifyItemsNoChangeAnimation(
                                     // Prevent recursive loop
                                     SelectionTracker.SELECTION_CHANGED_MARKER)
                         }
+
+                        if (selection.size() == 0 && !selected) { // Last item removed
+                            notify()
+                        } else if (selection.size() == 1 && selected) { // First item added
+                            notify()
+                            appBar.setExpanded(true)
+                        }
                     }
                 })
 
-                val savedSelection = savedSelection
-                if (savedSelection == null) {
-                    onRestoreInstanceState(savedInstanceState)
-                } else {
-                    setItemsSelected(savedSelection, true)
-                }
+                val backPressedCallback = requireActivity().onBackPressedDispatcher
+                        .addCallback(viewLifecycleOwner, false) { onTeamModificationsComplete() }
+                addObserver(object : AllChangesSelectionObserver<String>() {
+                    override fun onSelectionChanged() {
+                        backPressedCallback.isEnabled = hasSelection()
+                    }
+                })
+
+                onRestoreInstanceState(savedSelection ?: savedInstanceState)
             }
         }
         adapter.selectionTracker = selectionTracker
 
-        teams.asLiveData().observeNonNull(viewLifecycleOwner) {
+        teams.asLiveData().observe(viewLifecycleOwner) {
             val noTeams = it.isEmpty()
             noTeamsHint.animatePopReveal(noTeams)
             if (noTeams) fab.show()
@@ -149,17 +159,19 @@ internal class TeamListFragment : FragmentBase(), TeamSelectionListener, Selecte
 
     override fun onDestroyView() {
         super.onDestroyView()
-        savedSelection = MutableSelection<String>().apply { selectionTracker.copySelection(this) }
-        selectionTracker.clearSelection()
-
-        fab.hide()
-        fab.isVisible = false // Hack: don't animate
+        sharedResources.onDestroy(fab) {
+            setOnClickListener(null)
+            hide()
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        holder.onSaveInstanceState(outState)
-        if (::adapter.isInitialized) adapter.onSaveInstanceState(outState)
-        if (::selectionTracker.isInitialized) selectionTracker.onSaveInstanceState(outState)
+        if (view != null) {
+            adapter.onSaveInstanceState(outState)
+            selectionTracker.onSaveInstanceState(outState)
+        } else {
+            savedSelection?.let { outState.putAll(it) }
+        }
     }
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
@@ -170,8 +182,8 @@ internal class TeamListFragment : FragmentBase(), TeamSelectionListener, Selecte
 
     override fun onOptionsItemSelected(item: MenuItem) = menuHelper.onOptionsItemSelected(item)
 
-    override fun onTeamSelected(args: Bundle, restoreOnConfigChange: Boolean) {
-        onHolderReadyTask.task.addOnSuccessListener { it.selectTeam(args.getParcelable(TEAM_KEY)) }
+    override fun onTeamSelected(args: Bundle, transitionView: View?) {
+        holder.selectTeam(args.getParcelable(TEAM_KEY))
     }
 
     override fun onClick(v: View) {
@@ -187,7 +199,9 @@ internal class TeamListFragment : FragmentBase(), TeamSelectionListener, Selecte
         teamsView.smoothScrollToPosition(0)
     }
 
-    override fun onBackPressed() = selectionTracker.clearSelection()
+    override fun onTeamModificationsComplete() {
+        selectionTracker.clearSelection()
+    }
 
     companion object : TeamListFragmentCompanion {
         override fun getInstance(manager: FragmentManager) =

@@ -5,6 +5,7 @@
     <!-- Home activity -->
     <string name="home_teams_title">Teams</string>
     <string name="home_autoscout_title">Auto Scout</string>
+    <string name="home_templates_title">Templates</string>
 
     <string name="navigation_drawer_open_desc">Open navigation drawer</string>
     <string name="navigation_drawer_close_desc">Close navigation drawer</string>
@@ -16,19 +17,13 @@
     <string name="sign_in_try_again_title">Try again</string>
 
     <string name="installing_module">Installing module…</string>
-
-    <!-- Donate dialog -->
-    <string name="donate_title">Donate</string>
-    <string name="donate_amount">$%d</string>
-    <string name="donate_monthly_message">Automatically donate each month</string>
-    <string name="donate_cancel_message">
-        Are you sure you don’t want to donate? We appreciate any donation no matter how small!
-    </string>
-    <string name="donate_thanks_message">Thank you!!! Any and all help is greatly appreciated!</string>
+    <string name="donate_patreon_title">Support development</string>
 
     <!-- Link activity -->
     <string name="link_teams_imported_message">Teams successfully imported</string>
-    <string name="link_uri_parse_error">Error: couldn’t parse URL</string>
+    <string name="link_uri_parse_error">
+        Error: couldn’t parse URL. Check your internet connection.
+    </string>
 
     <!-- Shortcuts -->
     <string name="team_new_title">New team/scout</string>
@@ -37,15 +32,16 @@
 
     <!-- Feature modules -->
     <string name="scout_activity_title">Scout editor</string>
-    <string name="template_activity_title">Scout template editor</string>
+    <string name="trash_activity_title">Trash</string>
     <string name="settings_activity_title">Settings</string>
 
     <string name="feature_teams_title">Teams</string>
     <string name="feature_auto_scout_title">Auto Scout</string>
-    <string name="feature_scouts_title">Scout editor</string>
     <string name="feature_templates_title">Template editor</string>
-    <string name="feature_settings_title">Settings</string>
+    <string name="feature_scouts_title">@string/scout_activity_title</string>
     <string name="feature_exports_title">Exports</string>
+    <string name="feature_trash_title">@string/trash_activity_title</string>
+    <string name="feature_settings_title">@string/settings_activity_title</string>
 
     <!-- Other -->
     <string name="asset_statements" translatable="false">

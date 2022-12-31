@@ -1,18 +1,24 @@
 package com.supercilex.robotscouter.core.data.client
 
-import androidx.work.Worker
-import com.supercilex.robotscouter.core.logCrashLog
-import kotlinx.coroutines.experimental.runBlocking
+import android.content.Context
+import androidx.work.CoroutineWorker
+import androidx.work.WorkerParameters
+import com.supercilex.robotscouter.core.logBreadcrumb
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.invoke
 
-internal abstract class WorkerBase : Worker() {
-    override fun doWork() = runBlocking {
-        if (runAttemptCount >= MAX_RUN_ATTEMPTS) return@runBlocking Result.FAILURE
+internal abstract class WorkerBase(
+        context: Context,
+        workerParams: WorkerParameters
+) : CoroutineWorker(context, workerParams) {
+    override suspend fun doWork(): Result {
+        if (runAttemptCount >= MAX_RUN_ATTEMPTS) return Result.failure()
 
-        try {
-            doBlockingWork()
+        return try {
+            Dispatchers.IO { doBlockingWork() }
         } catch (e: Exception) {
-            logCrashLog("$javaClass errored: $e")
-            Result.RETRY
+            logBreadcrumb("$javaClass errored: $e")
+            Result.retry()
         }
     }
 

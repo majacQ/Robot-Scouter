@@ -1,17 +1,12 @@
 import com.android.build.gradle.BaseExtension
-import org.jetbrains.kotlin.gradle.dsl.Coroutines
+import org.apache.commons.io.output.TeeOutputStream
+import org.jetbrains.kotlin.gradle.dsl.KotlinJvmOptions
 import org.jetbrains.kotlin.gradle.dsl.KotlinProjectExtension
 import org.jetbrains.kotlin.gradle.internal.AndroidExtensionsExtension
 import org.jetbrains.kotlin.gradle.internal.CacheImplementation
 
 buildscript {
-    repositories {
-        google()
-        jcenter()
-        maven { url = uri("https://jitpack.io") }
-        maven { url = uri("https://maven.fabric.io/public") }
-        maven { url = uri("https://dl.bintray.com/kotlin/kotlin-dev/") }
-    }
+    repositories.deps()
 
     dependencies {
         classpath(Config.Plugins.android)
@@ -19,55 +14,75 @@ buildscript {
         classpath(Config.Plugins.google)
         classpath(Config.Plugins.firebase)
         classpath(Config.Plugins.fabric)
-        classpath(Config.Plugins.publishing)
     }
 }
 
 plugins {
-    id("com.github.ben-manes.versions") version "0.20.0"
+    `lifecycle-base`
+    id("com.supercilex.robotscouter.build")
+    Config.Plugins.run { versionChecker }
+}
+
+buildScan {
+    termsOfServiceUrl = "https://gradle.com/terms-of-service"
+    termsOfServiceAgree = "yes"
+
+    publishAlways()
+    for (tag in buildTags) tag(tag)
 }
 
 allprojects {
-    repositories {
-        google()
-        jcenter()
-        maven { url = uri("https://jitpack.io") }
-        maven { url = uri("https://dl.bintray.com/kotlin/kotlin-dev/") }
-    }
+    repositories.deps()
 
     configureGeneral()
+    configureKtlint()
     configureAndroid()
 }
 
-tasks.withType<Wrapper> {
+tasks.wrapper {
     distributionType = Wrapper.DistributionType.ALL
 }
 
 fun Project.configureGeneral() {
-    configurations {
-        "releaseRuntimeClasspath" {
-            resolutionStrategy.activateDependencyLocking()
+    afterEvaluate {
+        convention.findByType<KotlinProjectExtension>()?.apply {
+            sourceSets.configureEach {
+                languageSettings.progressiveMode = true
+                languageSettings.enableLanguageFeature("NewInference")
+                languageSettings.useExperimentalAnnotation(
+                        "kotlinx.coroutines.ExperimentalCoroutinesApi")
+            }
         }
-        create("ktlint")
     }
+}
 
-    task("ktlint", JavaExec::class) {
-        main = "com.github.shyiko.ktlint.Main"
-        classpath = configurations.getByName("ktlint")
+fun Project.configureKtlint() {
+    val ktlintConfig = configurations.create("ktlint")
+    val ktlint = tasks.register<JavaExec>("ktlint") {
+        if (!file("src").exists()) {
+            isEnabled = false
+            return@register
+        }
+
+        main = "com.pinterest.ktlint.Main"
+        classpath = ktlintConfig
         args = listOf("src/**/*.kt")
+        maxHeapSize = "100m"
+
+        val output = File(buildDir, "reports/ktlint/log.txt")
+        inputs.dir(fileTree("src").apply { include("**/*.kt") })
+        outputs.file(output)
+        outputs.cacheIf { true }
+
+        doFirst { standardOutput = TeeOutputStream(standardOutput, output.outputStream()) }
     }
-    tasks.whenTaskAdded {
-        if (name == "check") dependsOn("ktlint")
-    }
+    tasks.matching { it.name == "check" }.configureEach { dependsOn(ktlint) }
 
     dependencies { "ktlint"(Config.Plugins.ktlint) }
 }
 
 fun Project.configureAndroid() {
-    // Resource packaging breaks otherwise for some reason
-    tasks.whenTaskAdded {
-        if (name.contains("Test")) enabled = false
-    }
+    configurations.register("compileClasspath") // TODO see https://youtrack.jetbrains.com/issue/KT-27170
 
     val tree = (group as String).split(".")
     when {
@@ -78,6 +93,13 @@ fun Project.configureAndroid() {
     }
     apply(plugin = "kotlin-android")
     apply(plugin = "kotlin-android-extensions")
+
+    // Resource packaging breaks otherwise for some reason
+    tasks.matching { it.name.contains("Test") }.configureEach { enabled = false }
+
+    if (!isReleaseBuild) {
+        tasks.matching { it.name.contains("lintVitalRelease") }.configureEach { enabled = false }
+    }
 
     configure<BaseExtension> {
         compileSdkVersion(Config.SdkVersions.compile)
@@ -91,6 +113,7 @@ fun Project.configureAndroid() {
         }
 
         lintOptions {
+            isCheckDependencies = true
             isCheckAllWarnings = true
             isWarningsAsErrors = true
             isAbortOnError = false
@@ -98,7 +121,9 @@ fun Project.configureAndroid() {
             baseline(file("$rootDir/app/android-base/lint-baseline.xml"))
             disable(
                     "InvalidPackage", // Needed because of Okio
-                    "GradleDependency", "NewerVersionAvailable" // For build reproducibility
+                    "GradleDependency", "NewerVersionAvailable", // For build reproducibility
+                    "WrongThreadInterprocedural", // Slow
+                    "SyntheticAccessor" // Don't care, proguard should deal with it
             )
 
             val reportsDir = "$buildDir/reports"
@@ -107,17 +132,17 @@ fun Project.configureAndroid() {
         }
 
         compileOptions {
-            setSourceCompatibility(JavaVersion.VERSION_1_8)
-            setTargetCompatibility(JavaVersion.VERSION_1_8)
+            sourceCompatibility = JavaVersion.VERSION_1_8
+            targetCompatibility = JavaVersion.VERSION_1_8
+        }
+
+        (this as ExtensionAware).configure<KotlinJvmOptions> {
+            jvmTarget = "1.8"
         }
     }
 
-    configure<KotlinProjectExtension> {
-        experimental.coroutines = Coroutines.ENABLE
-    }
-
     configure<AndroidExtensionsExtension> {
-        configure(delegateClosureOf<AndroidExtensionsExtension> { isExperimental = true })
+        isExperimental = true
         defaultCacheImplementation = CacheImplementation.SPARSE_ARRAY
     }
 }

@@ -2,26 +2,24 @@ package com.supercilex.robotscouter.shared.scouting
 
 import android.os.Bundle
 import android.view.View
-import androidx.lifecycle.ViewModelProviders
-import androidx.lifecycle.get
+import androidx.annotation.LayoutRes
+import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.firestore.CollectionReference
-import com.supercilex.robotscouter.core.LateinitVal
 import com.supercilex.robotscouter.core.ui.FragmentBase
+import com.supercilex.robotscouter.core.ui.LifecycleAwareLazy
 import com.supercilex.robotscouter.core.ui.SavedStateAdapter
-import com.supercilex.robotscouter.core.ui.find
-import com.supercilex.robotscouter.core.unsafeLazy
 
-abstract class MetricListFragment : FragmentBase() {
-    protected val holder: MetricListHolder by unsafeLazy {
-        ViewModelProviders.of(this).get<MetricListHolder>()
-    }
+abstract class MetricListFragment(@LayoutRes contentLayoutId: Int) : FragmentBase(contentLayoutId) {
+    protected val holder by viewModels<MetricListHolder>()
     abstract val metricsRef: CollectionReference
     abstract val dataId: String
 
-    protected val metricsView by unsafeLazy { find<RecyclerView>(R.id.metricsView) }
-    protected var adapter: SavedStateAdapter<*, *> by LateinitVal()
+    protected val metricsView: RecyclerView by LifecycleAwareLazy {
+        requireView().findViewById(R.id.metricsView)
+    }
+    protected var adapter: SavedStateAdapter<*, *> by LifecycleAwareLazy()
         private set
 
     /**
@@ -56,7 +54,7 @@ abstract class MetricListFragment : FragmentBase() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putAll(tmpSavedAdapterState ?: run {
-            adapter.onSaveInstanceState(outState)
+            if (view != null) adapter.onSaveInstanceState(outState)
             tmpSavedAdapterState = outState
             outState
         })

@@ -9,8 +9,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.annotation.CallSuper
-import androidx.annotation.StringRes
-import androidx.fragment.app.FragmentActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.transition.AutoTransition
@@ -19,31 +17,36 @@ import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
 import com.github.rubensousa.gravitysnaphelper.GravitySnapHelper
 import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
+import com.google.firebase.firestore.DocumentReference
 import com.supercilex.robotscouter.common.second
-import com.supercilex.robotscouter.core.data.model.update
+import com.supercilex.robotscouter.core.data.model.add
+import com.supercilex.robotscouter.core.data.model.remove
 import com.supercilex.robotscouter.core.model.Metric
 import com.supercilex.robotscouter.core.ui.RecyclerPoolHolder
 import com.supercilex.robotscouter.core.ui.longSnackbar
 import com.supercilex.robotscouter.core.ui.notifyItemsNoChangeAnimation
 import com.supercilex.robotscouter.core.ui.setOnLongClickListenerCompat
 import com.supercilex.robotscouter.core.unsafeLazy
+import com.supercilex.robotscouter.shared.scouting.MetricListFragment
 import com.supercilex.robotscouter.shared.scouting.MetricViewHolderBase
 import com.supercilex.robotscouter.shared.scouting.R
 import kotlinx.android.synthetic.main.scout_base_stopwatch.*
-import kotlinx.coroutines.experimental.Job
-import kotlinx.coroutines.experimental.TimeoutCancellationException
-import kotlinx.coroutines.experimental.android.UI
-import kotlinx.coroutines.experimental.delay
-import kotlinx.coroutines.experimental.launch
-import kotlinx.coroutines.experimental.withTimeout
-import org.jetbrains.anko.find
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import com.supercilex.robotscouter.core.ui.R as RC
 
 open class StopwatchViewHolder(
-        itemView: View
+        itemView: View,
+        fragment: MetricListFragment
 ) : MetricViewHolderBase<Metric.Stopwatch, List<Long>>(itemView),
         View.OnClickListener, View.OnLongClickListener {
     private var timer: Timer? = null
@@ -57,6 +60,9 @@ open class StopwatchViewHolder(
         checkNotNull(AnimatedVectorDrawableCompat.create(
                 itemView.context, R.drawable.ic_timer_off_to_on_24dp))
     }
+    private val startStopwatchTitle by unsafeLazy {
+        itemView.resources.getString(R.string.metric_stopwatch_start_title)
+    }
 
     private val cyclesAdapter = Adapter()
 
@@ -66,7 +72,7 @@ open class StopwatchViewHolder(
 
         cycles.layoutManager = LinearLayoutManager(
                 itemView.context,
-                LinearLayoutManager.HORIZONTAL,
+                RecyclerView.HORIZONTAL,
                 false
         ).apply {
             initialPrefetchItemCount = 6
@@ -74,10 +80,8 @@ open class StopwatchViewHolder(
         cycles.adapter = cyclesAdapter
         GravitySnapHelper(Gravity.START).attachToRecyclerView(cycles)
 
-        (itemView.context as FragmentActivity).supportFragmentManager.fragments
-                .filterIsInstance<RecyclerPoolHolder>()
-                .single()
-                .let { cycles.setRecycledViewPool(it.recyclerPool) }
+        cycles.setRecycledViewPool(
+                (fragment.requireParentFragment() as RecyclerPoolHolder).recyclerPool)
     }
 
     override fun bind() {
@@ -85,16 +89,16 @@ open class StopwatchViewHolder(
         cycles.setHasFixedSize(false)
         cyclesAdapter.notifyDataSetChanged()
 
-        val timer = TIMERS[metric]
+        val timer = TIMERS[metric.ref]
         if (timer == null) {
-            setText(R.string.metric_stopwatch_start_title)
+            setStartTitle()
             updateStyle(false, false)
         } else {
             timer.holder = this
             updateStyle(true, false)
             timer.updateButtonTime()
-            this.timer = timer
         }
+        this.timer = timer
     }
 
     override fun onClick(v: View) {
@@ -103,15 +107,14 @@ open class StopwatchViewHolder(
             undoAddSnackbar?.dismiss()
             timer = Timer(this)
         } else {
-            val lap = currentTimer.cancel()
-            metric.update(metric.value.toMutableList().apply { add(lap) })
+            val lap = currentTimer.stop()
+            metric.add(metric.value.size, lap)
 
             metric.value.size.let { notifyCycleAdded(it, it) }
 
-            longSnackbar(itemView, R.string.scout_stopwatch_lap_added_message, RC.string.undo) {
+            itemView.longSnackbar(R.string.scout_stopwatch_lap_added_message, RC.string.undo) {
                 val hadAverage = metric.value.size >= LIST_SIZE_WITH_AVERAGE
-                val newCycles = metric.value.toMutableList().apply { remove(lap) }
-                metric.update(newCycles)
+                metric.remove(lap)
 
                 notifyCycleRemoved(metric.value.size, metric.value.size, hadAverage)
                 timer = Timer(this, currentTimer.startTimeMillis)
@@ -122,8 +125,8 @@ open class StopwatchViewHolder(
     override fun onLongClick(v: View): Boolean {
         val currentTimer = timer ?: return false
 
-        currentTimer.cancel()
-        undoAddSnackbar = longSnackbar(itemView, RC.string.cancelled, RC.string.undo) {
+        currentTimer.stop()
+        undoAddSnackbar = itemView.longSnackbar(RC.string.cancelled, RC.string.undo) {
             timer = Timer(this, currentTimer.startTimeMillis)
         }.addCallback(object : BaseTransientBottomBar.BaseCallback<Snackbar>() {
             override fun onDismissed(transientBottomBar: Snackbar, event: Int) {
@@ -150,6 +153,10 @@ open class StopwatchViewHolder(
             cyclesAdapter.notifyItemChanged(0)
 
             updateCycleNames(position, size)
+
+            if (size >= LIST_SIZE_WITH_AVERAGE) {
+                cycles.post { cycles.smoothScrollToPosition(position) }
+            }
         }
     }
 
@@ -178,15 +185,20 @@ open class StopwatchViewHolder(
         }
     }
 
-    private fun setText(@StringRes id: Int, vararg formatArgs: Any) {
-        stopwatch.text = itemView.resources.getString(id, *formatArgs)
+    private fun setStartTitle() {
+        stopwatch.text = startStopwatchTitle
+    }
+
+    private fun setStopTitle(formattedTime: String) {
+        stopwatch.text = itemView.resources
+                .getString(R.string.metric_stopwatch_stop_title, formattedTime)
     }
 
     private fun updateStyle(isRunning: Boolean, animate: Boolean = true) {
         // There's a bug pre-L where changing the view state doesn't update the vector drawable.
         // Because of that, calling View#setActivated(isRunning) doesn't update the background
         // color and we end up with unreadable text.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return
+        if (Build.VERSION.SDK_INT < 21) return
 
         stopwatch.isActivated = isRunning
 
@@ -220,7 +232,7 @@ open class StopwatchViewHolder(
         var holder: StopwatchViewHolder?
             get() = _holder.get()?.takeIf { it.metric.ref == metric.ref }
             set(holder) {
-                _holder = WeakReference<StopwatchViewHolder>(holder)
+                _holder = WeakReference(checkNotNull(holder))
             }
 
         /** @return the time since this class was instantiated in milliseconds */
@@ -228,18 +240,18 @@ open class StopwatchViewHolder(
             get() = System.currentTimeMillis() - startTimeMillis
 
         init {
-            TIMERS[holder.metric] = this
+            TIMERS[holder.metric.ref] = this
 
-            updater = launch(UI) {
+            updater = GlobalScope.launch(Dispatchers.Main) {
                 try {
-                    withTimeout(GAME_TIME_MINS, TimeUnit.MINUTES) {
+                    withTimeout(TimeUnit.MINUTES.toMillis(GAME_TIME_MINS)) {
                         while (isActive) {
                             updateButtonTime()
-                            delay(1, TimeUnit.SECONDS)
+                            delay(1000)
                         }
                     }
                 } catch (e: TimeoutCancellationException) {
-                    cancel()
+                    stop()
                 }
             }
 
@@ -248,25 +260,19 @@ open class StopwatchViewHolder(
         }
 
         fun updateButtonTime() {
-            setText(R.string.metric_stopwatch_stop_title, getFormattedTime(elapsedTimeMillis))
+            holder?.setStopTitle(getFormattedTime(elapsedTimeMillis))
         }
 
         /** @return the time since this class was instantiated and then cancelled */
-        fun cancel(): Long {
+        fun stop(): Long {
             holder?.timer = null
-            TIMERS.filter { it.value == this }.forEach {
-                TIMERS.remove(it.key)
-            }
+            TIMERS.remove(metric.ref)
 
             updater.cancel()
             updateStyle()
-            setText(R.string.metric_stopwatch_start_title)
+            holder?.setStartTitle()
 
             return elapsedTimeMillis
-        }
-
-        private fun setText(@StringRes id: Int, vararg formatArgs: Any) {
-            holder?.setText(id, *formatArgs)
         }
 
         private fun updateStyle() {
@@ -325,8 +331,8 @@ open class StopwatchViewHolder(
 
     private abstract class DataHolder(itemView: View) : RecyclerView.ViewHolder(itemView),
             View.OnCreateContextMenuListener, MenuItem.OnMenuItemClickListener {
-        protected val title: TextView = itemView.find(android.R.id.text1)
-        protected val value: TextView = itemView.find(android.R.id.text2)
+        protected val title: TextView = itemView.findViewById(R.id.title)
+        protected val value: TextView = itemView.findViewById(R.id.value)
 
         /**
          * The outclass's instance. Used indirectly since this ViewHolder may be recycled across
@@ -358,18 +364,15 @@ open class StopwatchViewHolder(
             val rawPosition = adapterPosition
 
             val newCycles = metric.value.toMutableList()
+            if (position >= newCycles.size) return false
             val deletedCycle = newCycles.removeAt(position)
-            metric.update(newCycles)
+            metric.remove(deletedCycle)
 
             holder.notifyCycleRemoved(position, metric.value.size, hadAverage)
 
-            longSnackbar(itemView, R.string.deleted, R.string.undo) {
+            itemView.longSnackbar(R.string.deleted, R.string.undo) {
                 val latestMetric = holder.metric
-
-                latestMetric.update(latestMetric.value.toMutableList().apply {
-                    add(position, deletedCycle)
-                })
-
+                latestMetric.add(position, deletedCycle)
                 holder.notifyCycleAdded(rawPosition, latestMetric.value.size)
             }
 
@@ -401,9 +404,10 @@ open class StopwatchViewHolder(
     }
 
     private companion object {
-        val TIMERS = ConcurrentHashMap<Metric.Stopwatch, Timer>()
+        val TIMERS = ConcurrentHashMap<DocumentReference, Timer>()
 
         const val LIST_SIZE_WITH_AVERAGE = 2
+
         // Don't conflict with metric types since the pool is shared
         const val DATA_ITEM = 1000
         const val AVERAGE_ITEM = 1001

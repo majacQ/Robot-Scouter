@@ -4,8 +4,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Observer
+import androidx.lifecycle.distinctUntilChanged
 import androidx.recyclerview.selection.SelectionTracker
 import com.bumptech.glide.Glide
 import com.bumptech.glide.ListPreloader
@@ -19,7 +19,6 @@ import com.supercilex.robotscouter.core.LateinitVal
 import com.supercilex.robotscouter.core.data.teams
 import com.supercilex.robotscouter.core.model.Team
 import com.supercilex.robotscouter.core.ui.SavedStateAdapter
-import com.supercilex.robotscouter.core.ui.find
 import com.supercilex.robotscouter.shared.CardListHelper
 import kotlinx.android.synthetic.main.team_list_row_layout.*
 import java.util.Collections
@@ -27,19 +26,19 @@ import java.util.Collections
 internal class TeamListAdapter(
         savedInstanceState: Bundle?,
         private val fragment: Fragment,
-        private val selectedTeamIdListener: MutableLiveData<Team?>
+        private val holder: TeamListHolder
 ) : SavedStateAdapter<Team, TeamViewHolder>(
         FirestoreRecyclerOptions.Builder<Team>()
                 .setSnapshotArray(teams)
-                .setLifecycleOwner(fragment)
+                .setLifecycleOwner(fragment.viewLifecycleOwner)
                 .build(),
         savedInstanceState,
-        fragment.find(R.id.teamsView)
+        fragment.requireView().findViewById(R.id.teamsView)
 ), ListPreloader.PreloadModelProvider<Team>, Observer<Team?> {
     var selectionTracker: SelectionTracker<String> by LateinitVal()
 
     private val viewSizeProvider = ViewPreloadSizeProvider<Team>()
-    private val preloader = RecyclerViewPreloader<Team>(
+    private val preloader = RecyclerViewPreloader(
             Glide.with(fragment),
             this,
             viewSizeProvider,
@@ -48,12 +47,14 @@ internal class TeamListAdapter(
 
     private val cardListHelper = CardListHelper(this, recyclerView)
 
+    private val distinctSelectedTeamIdListener =
+            holder.selectedTeamIdListener.distinctUntilChanged()
     private var selectedTeamId: String? = null
     private var hasSelectedTeamChanged = false
 
     init {
         recyclerView.addOnScrollListener(preloader)
-        selectedTeamIdListener.observeForever(this)
+        distinctSelectedTeamIdListener.observeForever(this)
     }
 
     override fun startListening() {
@@ -62,7 +63,7 @@ internal class TeamListAdapter(
         // More annoying constructor bugs: this will be called before we can assign our fields,
         // thus the NPE
         @Suppress("UNNECESSARY_SAFE_CALL")
-        selectedTeamIdListener?.observeForever(this)
+        distinctSelectedTeamIdListener?.observeForever(this)
     }
 
     override fun onChanged(team: Team?) {
@@ -99,8 +100,7 @@ internal class TeamListAdapter(
                             parent,
                             false
                     ),
-                    fragment,
-                    recyclerView
+                    fragment
             ).also {
                 viewSizeProvider.setView(it.media)
             }
@@ -111,7 +111,8 @@ internal class TeamListAdapter(
                 team,
                 team.isSelected(),
                 selectionTracker.hasSelection(),
-                selectedTeamId == team.id
+                selectedTeamId == team.id,
+                selectionTracker
         )
     }
 
@@ -136,8 +137,8 @@ internal class TeamListAdapter(
         if (type == ChangeEventType.REMOVED) {
             val id = snapshot.id
 
-            if (selectedTeamIdListener.value?.id == id) {
-                selectedTeamIdListener.value = null
+            if (holder.selectedTeamIdListener.value?.id == id) {
+                holder.selectTeam(null)
             }
 
             if (selectionTracker.isSelected(id)) {
@@ -149,6 +150,6 @@ internal class TeamListAdapter(
     override fun stopListening() {
         super.stopListening()
         recyclerView.removeOnScrollListener(preloader)
-        selectedTeamIdListener.removeObserver(this)
+        distinctSelectedTeamIdListener.removeObserver(this)
     }
 }

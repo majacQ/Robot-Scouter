@@ -6,7 +6,7 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
-import androidx.annotation.CallSuper
+import androidx.annotation.LayoutRes
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
@@ -14,9 +14,6 @@ import androidx.fragment.app.FragmentManager
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.firebase.analytics.FirebaseAnalytics
-
-inline fun AlertDialog.Builder.create(crossinline listener: AlertDialog.() -> Unit): AlertDialog =
-        create().apply { setOnShowListener { (it as AlertDialog).listener() } }
 
 fun DialogFragment.show(
         manager: FragmentManager,
@@ -29,14 +26,11 @@ fun DialogFragment.show(
 }
 
 abstract class DialogFragmentBase : DialogFragment() {
-    protected open val containerView: View? = null
-
-    override fun getView() = containerView
-
     override fun onResume() {
         super.onResume()
+        val screenName = javaClass.simpleName
         FirebaseAnalytics.getInstance(requireContext())
-                .setCurrentScreen(requireActivity(), null, javaClass.simpleName)
+                .setCurrentScreen(requireActivity(), screenName, screenName)
     }
 }
 
@@ -56,7 +50,7 @@ abstract class BottomSheetDialogFragmentBase : BottomSheetDialogFragment(),
 
         override fun onShow(dialog: DialogInterface) {
             val width = context.resources.getDimensionPixelSize(R.dimen.bottom_sheet_width)
-            window.setLayout(if (width > 0) {
+            window?.setLayout(if (width > 0) {
                 width
             } else {
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -74,28 +68,24 @@ abstract class BottomSheetDialogFragmentBase : BottomSheetDialogFragment(),
 
     override fun onResume() {
         super.onResume()
+        val screenName = javaClass.simpleName
         FirebaseAnalytics.getInstance(requireContext())
-                .setCurrentScreen(requireActivity(), null, javaClass.simpleName)
+                .setCurrentScreen(requireActivity(), screenName, screenName)
     }
 }
 
 /**
  * Enables choosing whether or not to dismiss the dialog when the positive button is clicked.
  *
- * **Note:** for this class to work correctly, the dialog must be an [AlertDialog] and set a
- * [DialogInterface.OnShowListener].
+ * **Note:** for this class to work correctly, the dialog must be an [AlertDialog].
  */
 abstract class ManualDismissDialog : DialogFragmentBase() {
     /** @return true if the dialog should be dismissed, false otherwise */
     protected abstract fun onAttemptDismiss(): Boolean
 
-    protected fun AlertDialog.Builder.createAndSetup(savedInstanceState: Bundle?) =
-            create { onShow(this, savedInstanceState) }
-
-    @CallSuper
-    open fun onShow(dialog: DialogInterface, savedInstanceState: Bundle?) {
-        dialog as AlertDialog
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+    override fun onStart() {
+        super.onStart()
+        (requireDialog() as AlertDialog).getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             handleOnAttemptDismiss()
         }
     }
@@ -110,23 +100,25 @@ abstract class KeyboardDialogBase : ManualDismissDialog() {
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         super.onActivityCreated(savedInstanceState)
-        dialog.window.setKeyboardModeVisible()
+        dialog?.window?.setKeyboardModeVisible()
     }
 
-    protected fun createDialog(@StringRes title: Int, savedInstanceState: Bundle?) =
-            AlertDialog.Builder(requireContext())
-                    .setView(view)
-                    .setTitle(title)
-                    .setPositiveButton(android.R.string.ok, null)
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .createAndSetup(savedInstanceState)
-
-    override fun onShow(dialog: DialogInterface, savedInstanceState: Bundle?) {
-        super.onShow(dialog, savedInstanceState)
+    override fun onStart() {
+        super.onStart()
         lastEditText.apply {
             setImeOnDoneListener { handleOnAttemptDismiss() }
             requestFocus()
             showKeyboard()
         }
     }
+
+    protected fun createDialog(
+            @LayoutRes viewId: Int,
+            @StringRes title: Int
+    ) = AlertDialog.Builder(requireContext())
+            .setView(viewId)
+            .setTitle(title)
+            .setPositiveButton(android.R.string.ok, null)
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
 }

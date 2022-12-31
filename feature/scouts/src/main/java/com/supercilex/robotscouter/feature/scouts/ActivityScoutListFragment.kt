@@ -1,41 +1,26 @@
 package com.supercilex.robotscouter.feature.scouts
 
-import android.app.Activity
 import android.app.ActivityManager
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.MenuItem
 import androidx.annotation.ColorInt
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.LiveData
-import com.google.android.gms.tasks.Task
 import com.google.firebase.auth.FirebaseAuth
-import com.supercilex.robotscouter.core.data.SCOUT_ARGS_KEY
 import com.supercilex.robotscouter.core.model.Team
-import com.supercilex.robotscouter.core.ui.isInTabletMode
+import com.supercilex.robotscouter.core.ui.colorPrimary
 import com.supercilex.robotscouter.shared.handleUpNavigation
-import kotlinx.android.synthetic.main.fragment_scout_list.*
-import com.supercilex.robotscouter.R as RC
+import kotlinx.android.synthetic.main.fragment_scout_list_toolbar.*
 
 internal class ActivityScoutListFragment : ScoutListFragmentBase(), FirebaseAuth.AuthStateListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val activity = requireActivity()
-        if (activity.callingActivity != null && activity.isInTabletMode()) {
-            activity.setResult(Activity.RESULT_OK, Intent().putExtra(SCOUT_ARGS_KEY, bundle))
-            activity.finish()
-        }
         FirebaseAuth.getInstance().addAuthStateListener(this)
     }
 
-    override fun newViewModel(savedInstanceState: Bundle?): AppBarViewHolderBase =
-            ActivityAppBarViewHolder(
-                    savedInstanceState,
-                    dataHolder.teamListener,
-                    onScoutingReadyTask.task
-            )
+    override fun newViewModel(): AppBarViewHolderBase =
+            ActivityAppBarViewHolder(dataHolder.teamListener)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         super.onActivityCreated(savedInstanceState)
@@ -64,19 +49,12 @@ internal class ActivityScoutListFragment : ScoutListFragmentBase(), FirebaseAuth
     override fun onTeamDeleted() = requireActivity().finish()
 
     private inner class ActivityAppBarViewHolder(
-            savedInstanceState: Bundle?,
-            listener: LiveData<Team?>,
-            onScoutingReadyTask: Task<Nothing?>
-    ) : AppBarViewHolderBase(
-            this@ActivityScoutListFragment,
-            savedInstanceState,
-            listener,
-            onScoutingReadyTask
-    ) {
+            listener: LiveData<Team?>
+    ) : AppBarViewHolderBase(this@ActivityScoutListFragment, listener) {
         override fun bind() {
             super.bind()
             checkNotNull((activity as AppCompatActivity).supportActionBar).title = team.toString()
-            setTaskDescription(ContextCompat.getColor(requireContext(), RC.color.colorPrimary))
+            setTaskDescription(colorPrimary)
         }
 
         override fun updateScrim(color: Int) {
@@ -86,12 +64,12 @@ internal class ActivityScoutListFragment : ScoutListFragmentBase(), FirebaseAuth
         }
 
         private fun setTaskDescription(@ColorInt colorPrimary: Int) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                requireActivity().setTaskDescription(
+            if (Build.VERSION.SDK_INT >= 28) {
+                activity?.setTaskDescription(
                         ActivityManager.TaskDescription(team.toString(), 0, colorPrimary))
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            } else if (Build.VERSION.SDK_INT >= 21) {
                 @Suppress("DEPRECATION")
-                requireActivity().setTaskDescription(
+                activity?.setTaskDescription(
                         ActivityManager.TaskDescription(team.toString(), null, colorPrimary))
             }
         }
