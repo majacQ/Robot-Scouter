@@ -19,7 +19,21 @@ interface OnActivityResult {
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?)
 }
 
+  <<<<<<< snyk-upgrade-8b98c69bb7423e6986ea50fb8b76167d
 abstract class ActivityBase : AppCompatActivity(), OnActivityResult, KeyboardShortcutListener {
+  =======
+interface Saveable {
+    /**
+     * @see [androidx.appcompat.app.AppCompatActivity.onSaveInstanceState]
+     * @see [androidx.fragment.app.Fragment.onSaveInstanceState]
+     */
+    fun onSaveInstanceState(outState: Bundle)
+}
+
+abstract class ActivityBase : AppCompatActivity(), OnActivityResult, Saveable,
+        KeyboardShortcutListener {
+    private val shortcutManager = ShortcutManager(this)
+  >>>>>>> shortcuts
     private val filteredEvents = mutableMapOf<Long, KeyEvent>()
     private var clearFocus: Runnable? = null
 
@@ -30,16 +44,17 @@ abstract class ActivityBase : AppCompatActivity(), OnActivityResult, KeyboardSho
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         if (filteredEvents.remove(event.downTime) != null) {
-            if (onShortcut(keyCode, event)) return true
-            val fragmentHandled = supportFragmentManager.fragments
-                    .filterIsInstance<KeyboardShortcutListener>()
-                    .any { it.onShortcut(keyCode, event) }
-            if (fragmentHandled) return true
+            if (shortcutManager.onEvent(event)) return true
         }
         return super.onKeyUp(keyCode, event)
     }
 
-    override fun onShortcut(keyCode: Int, event: KeyEvent) = false
+    override fun registerShortcut(
+            keyCode: Int,
+            metaState: Int,
+            description: Int,
+            action: () -> Unit
+    ) = shortcutManager.registerShortcut(keyCode, metaState, description, action)
 
     @Suppress("RedundantOverride") // Needed to relax visibility
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) =
@@ -71,9 +86,20 @@ abstract class ActivityBase : AppCompatActivity(), OnActivityResult, KeyboardSho
     }
 }
 
+  <<<<<<< snyk-upgrade-8b98c69bb7423e6986ea50fb8b76167d
 abstract class FragmentBase(
         @LayoutRes contentLayoutId: Int = 0
 ) : Fragment(contentLayoutId), OnActivityResult {
+  =======
+abstract class FragmentBase : Fragment(), OnActivityResult, Saveable, KeyboardShortcutListener {
+    override fun registerShortcut(
+            keyCode: Int,
+            metaState: Int,
+            description: Int,
+            action: () -> Unit
+    ) = (activity as ActivityBase).registerShortcut(keyCode, metaState, description, action)
+
+  >>>>>>> shortcuts
     override fun onResume() {
         super.onResume()
         val screenName = javaClass.simpleName
