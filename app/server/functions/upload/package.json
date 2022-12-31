@@ -65,6 +65,10 @@
   >>>>>>> instant-apps
   >>>>>>> instant-apps
     "lru-cache": "5.1.1",
+  <<<<<<< snyk-upgrade-8543cad664badf2efca9f62e17d430a6
+    "moment": "2.29.4",
+    "superagent": "5.2.2"
+  =======
   =======
   >>>>>>> instant-apps
   >>>>>>> instant-apps
@@ -88,6 +92,7 @@
     "superagent": "8.0.4"
   =======
     "superagent": "8.0.5"
+  >>>>>>> instant-apps
   >>>>>>> instant-apps
   >>>>>>> instant-apps
   >>>>>>> instant-apps
