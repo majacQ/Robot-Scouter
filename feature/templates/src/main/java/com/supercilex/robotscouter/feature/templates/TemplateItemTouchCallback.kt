@@ -4,6 +4,8 @@ package com.supercilex.robotscouter.feature.templates
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.drawable.Drawable
+  <<<<<<< snyk-upgrade-fa0fb9950364cdb0ca0f7052bac8aede
+  =======
   <<<<<<< snyk-upgrade-e3e183a68c11f3b1dc83966f2fc5672d
   =======
   =======
@@ -11,6 +13,7 @@ import android.support.design.widget.AppBarLayout
 import android.support.v4.app.FragmentActivity
 import android.support.v7.widget.RecyclerView
 import android.support.v7.widget.helper.ItemTouchHelper
+  >>>>>>> item-selector-trashing
   >>>>>>> item-selector-trashing
   >>>>>>> item-selector-trashing
 import android.view.View
@@ -57,6 +60,8 @@ internal class TemplateItemTouchCallback<T : OrderedRemoteModel>(
         color = ContextCompat.getColor(rootView.context, RC.color.delete_background)
     }
     private val deleteIconPadding = rootView.resources.getDimensionPixelSize(RC.dimen.spacing_large)
+  <<<<<<< snyk-upgrade-fa0fb9950364cdb0ca0f7052bac8aede
+  =======
   <<<<<<< snyk-upgrade-e3e183a68c11f3b1dc83966f2fc5672d
   =======
 
@@ -66,6 +71,7 @@ internal class TemplateItemTouchCallback<T : OrderedRemoteModel>(
     private val appBar: AppBarLayout = (rootView.context as FragmentActivity).find(R.id.appBar)
     var adapter: FirestoreRecyclerAdapter<T, *> by LateinitVal()
     var itemTouchHelper: ItemTouchHelper by LateinitVal()
+  >>>>>>> item-selector-trashing
   >>>>>>> item-selector-trashing
 
   >>>>>>> item-selector-trashing
@@ -267,7 +273,10 @@ internal class TemplateItemTouchCallback<T : OrderedRemoteModel>(
                 }.logFailures("onSwiped:addMetric", deletedRef, itemsBelow)
             }
         }.logFailures("onSwiped:getMetric", deletedRef)
+  <<<<<<< snyk-upgrade-fa0fb9950364cdb0ca0f7052bac8aede
+  =======
   <<<<<<< snyk-upgrade-e3e183a68c11f3b1dc83966f2fc5672d
+  >>>>>>> item-selector-trashing
     }
 
     override fun onChildDraw(
