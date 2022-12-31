@@ -6,6 +6,7 @@ import com.supercilex.robotscouter.common.FIRESTORE_BASE_TIMESTAMP
 import com.supercilex.robotscouter.common.FIRESTORE_CONTENT_ID
 import com.supercilex.robotscouter.common.FIRESTORE_LAST_LOGIN
 import com.supercilex.robotscouter.common.FIRESTORE_METRICS
+import com.supercilex.robotscouter.common.FIRESTORE_NAME
 import com.supercilex.robotscouter.common.FIRESTORE_OWNERS
 import com.supercilex.robotscouter.common.FIRESTORE_SCOUTS
 import com.supercilex.robotscouter.common.FIRESTORE_SHARE_TYPE
@@ -13,12 +14,14 @@ import com.supercilex.robotscouter.common.FIRESTORE_TIMESTAMP
 import com.supercilex.robotscouter.common.FIRESTORE_TYPE
 import com.supercilex.robotscouter.server.utils.FIRESTORE_EMAIL
 import com.supercilex.robotscouter.server.utils.FIRESTORE_PHONE_NUMBER
+import com.supercilex.robotscouter.server.utils.FIRESTORE_PHOTO_URL
 import com.supercilex.robotscouter.server.utils.auth
 import com.supercilex.robotscouter.server.utils.batch
 import com.supercilex.robotscouter.server.utils.delete
 import com.supercilex.robotscouter.server.utils.deletionQueue
 import com.supercilex.robotscouter.server.utils.duplicateTeams
 import com.supercilex.robotscouter.server.utils.firestore
+import com.supercilex.robotscouter.server.utils.getAsMap
 import com.supercilex.robotscouter.server.utils.getTeamsQuery
 import com.supercilex.robotscouter.server.utils.getTemplatesQuery
 import com.supercilex.robotscouter.server.utils.getTrashedTeamsQuery
@@ -30,6 +33,7 @@ import com.supercilex.robotscouter.server.utils.templates
 import com.supercilex.robotscouter.server.utils.toMap
 import com.supercilex.robotscouter.server.utils.toTeamString
 import com.supercilex.robotscouter.server.utils.toTemplateString
+import com.supercilex.robotscouter.server.utils.types.AuthContext
 import com.supercilex.robotscouter.server.utils.types.CallableContext
 import com.supercilex.robotscouter.server.utils.types.Change
 import com.supercilex.robotscouter.server.utils.types.CollectionReference
@@ -51,6 +55,7 @@ import kotlinx.coroutines.asPromise
 import kotlinx.coroutines.async
 import kotlinx.coroutines.await
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -75,7 +80,7 @@ fun deleteUnusedData(): Promise<*>? = GlobalScope.async {
         ))
     }
     val anonymousUser = async {
-        deleteUnusedData(users.where(
+        deleteAnonymousUsers(users.where(
                 FIRESTORE_LAST_LOGIN,
                 "<",
                 Timestamps.fromDate(
@@ -100,20 +105,28 @@ fun emptyTrash(): Promise<*>? = GlobalScope.async {
     ).processInBatches(10) { processDeletion(it) }
 }.asPromise()
 
-fun emptyTrash(data: Array<String>?, context: CallableContext): Promise<*>? {
+fun emptyTrash(data: Json, context: CallableContext): Promise<*>? {
     val auth = context.auth ?: throw HttpsError("unauthenticated")
+    return GlobalScope.async {
+        emptyTrash(auth, data)
+    }.asPromise()
+}
+
+suspend fun emptyTrash(auth: AuthContext, data: Json) {
+    @Suppress("UNCHECKED_CAST")
+    val ids = data["ids"] as? Array<String>?
 
     console.log("Emptying trash for ${auth.uid}.")
-    return GlobalScope.async {
-        val requests = deletionQueue.doc(auth.uid).get().await()
+    val requests = deletionQueue.doc(auth.uid).get().await()
 
-        if (!requests.exists) {
-            console.log("Nothing to delete")
-            return@async
-        }
+    if (!requests.exists) {
+        console.log("Nothing to delete")
+        return
+    }
 
-        processDeletion(requests, data.orEmpty().toList())
-    }.asPromise()
+    coroutineScope {
+        processDeletion(requests, ids.orEmpty().toList())
+    }
 }
 
 fun sanitizeDeletionRequest(event: Change<DeltaDocumentSnapshot>): Promise<*>? {
@@ -142,9 +155,37 @@ fun sanitizeDeletionRequest(event: Change<DeltaDocumentSnapshot>): Promise<*>? {
     }
 }
 
-private suspend fun CoroutineScope.deleteUnusedData(
+private suspend fun deleteAnonymousUsers(
         userQuery: Query
 ) = userQuery.processInBatches(10) { user ->
+    val userRecord = try {
+        auth.getUser(user.id).await()
+    } catch (t: Throwable) {
+        if (t.asDynamic().code != "auth/user-not-found") throw t else null
+    }
+
+    if (userRecord == null || userRecord.providerData.orEmpty().isEmpty()) {
+        purgeUser(user)
+    } else {
+        console.log("Correcting user inadvertently marked as anonymous: " +
+                            JSON.stringify(userRecord.toJSON()))
+
+        val payload = json()
+        userRecord.email?.let { payload[FIRESTORE_EMAIL] = it }
+        userRecord.displayName?.let { payload[FIRESTORE_NAME] = it }
+        userRecord.phoneNumber?.let { payload[FIRESTORE_PHONE_NUMBER] = it }
+        userRecord.photoURL?.let { payload[FIRESTORE_PHOTO_URL] = it }
+        user.ref.set(payload, SetOptions.merge).await()
+    }
+}
+
+private suspend fun deleteUnusedData(
+        userQuery: Query
+) = userQuery.processInBatches(10) { user ->
+    purgeUser(user)
+}
+
+private suspend fun purgeUser(user: DocumentSnapshot) = coroutineScope {
     console.log("Deleting all data for user:\n${JSON.stringify(user.data())}")
 
     val userId = user.id
@@ -264,8 +305,7 @@ private suspend fun deleteUser(user: DocumentSnapshot) {
     try {
         auth.deleteUser(user.id).await()
     } catch (t: Throwable) {
-        @Suppress("UNCHECKED_CAST_TO_EXTERNAL_INTERFACE") // It's a JS object
-        if ((t as Json)["code"] != "auth/user-not-found") throw t
+        if (t.asDynamic().code != "auth/user-not-found") throw t
     }
 
     deletionQueue.doc(user.id).delete().await()
@@ -281,7 +321,7 @@ suspend fun deleteTeam(team: DocumentSnapshot) {
             it.ref.collection(FIRESTORE_METRICS).delete()
         }
 
-        team.get<Json>(FIRESTORE_OWNERS).toMap<Long>().map { (uid) ->
+        team.getAsMap<Long>(FIRESTORE_OWNERS).map { (uid) ->
             duplicateTeams.doc(uid)
                     .set(json(id to FieldValues.delete()), SetOptions.merge)
                     .asDeferred()

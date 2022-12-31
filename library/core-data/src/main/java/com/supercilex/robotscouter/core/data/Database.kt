@@ -4,6 +4,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.firebase.ui.common.BaseObservableSnapshotArray
 import com.firebase.ui.common.ChangeEventType
 import com.firebase.ui.firestore.ChangeEventListener
@@ -23,7 +24,6 @@ import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.WriteBatch
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
-import com.google.gson.Gson
 import com.supercilex.robotscouter.common.DeletionType
 import com.supercilex.robotscouter.common.FIRESTORE_CONTENT_ID
 import com.supercilex.robotscouter.common.FIRESTORE_LAST_LOGIN
@@ -32,11 +32,8 @@ import com.supercilex.robotscouter.common.FIRESTORE_TIMESTAMP
 import com.supercilex.robotscouter.common.FIRESTORE_TYPE
 import com.supercilex.robotscouter.common.isPolynomial
 import com.supercilex.robotscouter.core.CrashLogger
-import com.supercilex.robotscouter.core.RobotScouter
 import com.supercilex.robotscouter.core.data.client.retrieveLocalMedia
-import com.supercilex.robotscouter.core.data.client.retrieveShouldUpload
 import com.supercilex.robotscouter.core.data.client.startUploadMediaJob
-import com.supercilex.robotscouter.core.data.model.add
 import com.supercilex.robotscouter.core.data.model.fetchLatestData
 import com.supercilex.robotscouter.core.data.model.forceUpdate
 import com.supercilex.robotscouter.core.data.model.isStale
@@ -49,17 +46,12 @@ import com.supercilex.robotscouter.core.data.model.userRef
 import com.supercilex.robotscouter.core.isMain
 import com.supercilex.robotscouter.core.logBreadcrumb
 import com.supercilex.robotscouter.core.mainHandler
-import com.supercilex.robotscouter.core.model.User
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.invoke
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
-import org.jetbrains.anko.runOnUiThread
-import java.io.File
 import java.lang.reflect.Field
-import java.util.Calendar
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -150,43 +142,27 @@ private val teamUpdater = object : ChangeEventListenerBase {
             if (team.isStale) return@launch // Vague attempt at overwrite prevention
             val localMedia = team.retrieveLocalMedia()
             if (localMedia != null && localMedia.isValidTeamUri()) {
-                team.copy().apply {
-                    this.media = localMedia
-                    shouldUploadMediaToTba = retrieveShouldUpload()
-                    hasCustomMedia = true
-                    mediaYear = Calendar.getInstance().get(Calendar.YEAR)
-                    startUploadMediaJob()
-                }
+                startUploadMediaJob(team.id, team.toString(), localMedia)
             }
         }
     }
 }
-
-private val dbCacheLock = Mutex()
 
 fun initDatabase() {
     if (BuildConfig.DEBUG) FirebaseFirestore.setLoggingEnabled(true)
     teams.addChangeEventListener(teamTemplateIdUpdater)
     teams.addChangeEventListener(teamUpdater)
 
-    FirebaseAuth.getInstance().addAuthStateListener {
-        val user = it.currentUser
-        if (user == null) {
-            GlobalScope.launch(Dispatchers.IO) {
-                dbCacheLock.withLock { dbCache.deleteRecursively() }
+    ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            FirebaseAuth.getInstance().addAuthStateListener {
+                val user = it.currentUser
+                if (user != null) {
+                    updateLastLogin.run()
+                }
             }
-        } else {
-            updateLastLogin.run()
-
-            User(
-                    user.uid,
-                    user.email.nullOrFull(),
-                    user.phoneNumber.nullOrFull(),
-                    user.displayName.nullOrFull(),
-                    user.photoUrl?.toString()
-            ).smartWrite(userCache) { it.add() }
         }
-    }
+    })
 }
 
 inline fun firestoreBatch(
@@ -211,9 +187,8 @@ suspend fun Query.getInBatches(batchSize: Long = 100): List<DocumentSnapshot> {
     return docs
 }
 
-suspend fun <T> ObservableSnapshotArray<T>.waitForChange(): List<T> = suspendCoroutine {
-    // Ensure we're on the same thread that receives db callbacks to prevent CMEs
-    RobotScouter.runOnUiThread {
+suspend fun <T> ObservableSnapshotArray<T>.waitForChange(): List<T> = Dispatchers.Main {
+    suspendCoroutine {
         addChangeEventListener(object : ChangeEventListenerBase {
             override fun onDataChanged() {
                 it.resume(toList())
@@ -243,25 +218,6 @@ fun <T> ObservableSnapshotArray<T>.asLiveData(): LiveData<ObservableSnapshotArra
                 value = this@asLiveData
             } else {
                 postValue(this@asLiveData)
-            }
-        }
-    }
-}
-
-private inline fun <reified T> T.smartWrite(file: File, crossinline write: (t: T) -> Unit) {
-    val new = this
-    GlobalScope.launch(Dispatchers.IO) {
-        val cache = {
-            write(new)
-            file.safeCreateNewFile().writeText(Gson().toJson(new))
-        }
-
-        dbCacheLock.withLock {
-            if (file.exists()) {
-                val cached = Gson().fromJson(file.readText(), T::class.java)
-                if (new != cached) cache()
-            } else {
-                cache()
             }
         }
     }

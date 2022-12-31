@@ -10,11 +10,15 @@
     </dist:module>
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <application>
 
-        <service android:name=".ExportService" />
+        <service
+            android:name=".ExportService"
+            android:foregroundServiceType="dataSync" />
 
     </application>
 

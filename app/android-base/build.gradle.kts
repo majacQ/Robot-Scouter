@@ -1,10 +1,11 @@
-import com.google.gms.googleservices.GoogleServicesPlugin
 import java.io.FileInputStream
 import java.util.Properties
 
 plugins {
+    id("com.google.gms.google-services")
     id("io.fabric")
     Config.Plugins.run { publishing }
+    Config.Plugins.run { versioning }
 }
 if (isReleaseBuild) apply(plugin = "com.google.firebase.firebase-perf")
 crashlytics.alwaysUpdateBuildId = isReleaseBuild
@@ -16,7 +17,9 @@ android {
 
     defaultConfig {
         applicationId = "com.supercilex.robotscouter"
-        versionName = "3.1.0-dev"
+        versionName = "dev"
+        base.archivesBaseName = "robot-scouter"
+
         multiDexEnabled = true
     }
 
@@ -68,25 +71,31 @@ android {
 }
 
 play {
-    serviceAccountCredentials = file("google-play-auto-publisher.json")
+    val creds = file("google-play-auto-publisher.json")
+    isEnabled = creds.exists()
+    serviceAccountCredentials = creds
     defaultToAppBundles = true
 
+    promoteTrack = "alpha"
+
     resolutionStrategy = "auto"
-    outputProcessor { versionNameOverride = "$versionNameOverride.$versionCode" }
 }
+
+versionMaster {
+    configureVersionCode.set(false)
+}
+
+googleServices { disableVersionCheck = true }
 
 dependencies {
     implementation(project(":library:shared"))
     implementation(project(":library:shared-scouting"))
 
     implementation(Config.Libs.Jetpack.multidex)
-    implementation(Config.Libs.Jetpack.work)
+    implementation(Config.Libs.Jetpack.work.first())
     implementation(Config.Libs.PlayServices.playCore)
     implementation(Config.Libs.PlayServices.instantApps)
 
     implementation(Config.Libs.Firebase.perf)
-    implementation(Config.Libs.Firebase.invites)
+    implementation(Config.Libs.Firebase.links)
 }
-
-apply(plugin = "com.google.gms.google-services")
-GoogleServicesPlugin.config.disableVersionCheck = true

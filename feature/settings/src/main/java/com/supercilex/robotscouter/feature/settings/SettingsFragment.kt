@@ -4,15 +4,17 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.text.method.LinkMovementMethod
 import android.util.TypedValue
+import android.view.View
 import android.widget.TextView
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.getSystemService
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.net.toUri
-import androidx.lifecycle.observe
+import androidx.fragment.app.viewModels
 import androidx.preference.Preference
 import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceGroupAdapter
@@ -22,24 +24,25 @@ import androidx.preference.forEach
 import com.firebase.ui.auth.ErrorCodes
 import com.firebase.ui.auth.IdpResponse
 import com.google.firebase.auth.FirebaseAuth
+import com.supercilex.robotscouter.core.data.asLiveData
 import com.supercilex.robotscouter.core.data.clearPrefs
 import com.supercilex.robotscouter.core.data.debugInfo
 import com.supercilex.robotscouter.core.data.isFullUser
 import com.supercilex.robotscouter.core.data.isSignedIn
 import com.supercilex.robotscouter.core.data.logLoginEvent
 import com.supercilex.robotscouter.core.data.prefStore
+import com.supercilex.robotscouter.core.data.prefs
 import com.supercilex.robotscouter.core.fullVersionName
+import com.supercilex.robotscouter.core.toast
 import com.supercilex.robotscouter.core.ui.PreferenceFragmentBase
 import com.supercilex.robotscouter.shared.client.RC_SIGN_IN
 import com.supercilex.robotscouter.shared.client.startLinkingSignIn
 import com.supercilex.robotscouter.shared.launchUrl
-import com.supercilex.robotscouter.shared.stateViewModels
-import org.jetbrains.anko.support.v4.toast
 import com.supercilex.robotscouter.R as RC
 
 internal class SettingsFragment : PreferenceFragmentBase(),
         Preference.OnPreferenceChangeListener, Preference.OnPreferenceClickListener {
-    private val settingsModel by stateViewModels<SettingsViewModel>()
+    private val settingsModel by viewModels<SettingsViewModel>()
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         super.onActivityCreated(savedInstanceState)
@@ -60,7 +63,23 @@ internal class SettingsFragment : PreferenceFragmentBase(),
 
         preferenceManager.preferenceDataStore = prefStore
         addPreferencesFromResource(R.xml.app_preferences)
-        onPreferenceChange(preferenceScreen, null)
+
+        val screen = preferenceScreen
+        onPreferenceChange(screen, null)
+        prefs.asLiveData().observe(this) {
+            notifyChanged(screen)
+        }
+    }
+
+    private fun notifyChanged(preference: Preference) {
+        if (preference is PreferenceGroup) {
+            preference.forEach { notifyChanged(it) }
+            return
+        }
+
+        Preference::class.java.getDeclaredMethod("dispatchSetInitialValue").apply {
+            isAccessible = true
+        }.invoke(preference)
     }
 
     override fun onCreateAdapter(
@@ -114,9 +133,9 @@ internal class SettingsFragment : PreferenceFragmentBase(),
                     "https://www.transifex.com/supercilex/robot-scouter/".toUri()
             )
             KEY_VERSION -> {
-                checkNotNull(activity.getSystemService<ClipboardManager>()).primaryClip =
-                        ClipData.newPlainText(
-                                getString(R.string.settings_debug_info_title), debugInfo)
+                checkNotNull(activity.getSystemService<ClipboardManager>())
+                        .setPrimaryClip(ClipData.newPlainText(
+                                getString(R.string.settings_debug_info_title), debugInfo))
                 toast(R.string.settings_debug_info_copied_message)
             }
             else -> return false
@@ -150,8 +169,10 @@ internal class SettingsFragment : PreferenceFragmentBase(),
             super.onBindViewHolder(holder, position)
             if (getItem(position).key == KEY_ABOUT) {
                 holder.itemView.isClickable = false
-                (holder.findViewById(android.R.id.title) as TextView)
-                        .movementMethod = LinkMovementMethod.getInstance()
+                (holder.findViewById(android.R.id.title) as TextView).apply {
+                    movementMethod = LinkMovementMethod.getInstance()
+                    if (Build.VERSION.SDK_INT >= 17) textDirection = View.TEXT_DIRECTION_LOCALE
+                }
             }
         }
     }

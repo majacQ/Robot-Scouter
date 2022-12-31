@@ -9,8 +9,6 @@ import com.supercilex.robotscouter.core.RobotScouter
 import com.supercilex.robotscouter.core.data.SCOUT_ARGS_KEY
 import com.supercilex.robotscouter.core.ui.ActivityBase
 import com.supercilex.robotscouter.core.ui.addNewDocumentFlags
-import org.jetbrains.anko.intentFor
-import org.jetbrains.anko.multipleTask
 import com.supercilex.robotscouter.R as RC
 
 @Bridge
@@ -22,7 +20,8 @@ internal class ScoutListActivity : ActivityBase() {
         if (savedInstanceState == null) {
             supportFragmentManager.commit {
                 add(R.id.scoutList,
-                    ActivityScoutListFragment.newInstance(intent.getBundleExtra(SCOUT_ARGS_KEY)),
+                    ActivityScoutListFragment.newInstance(
+                            checkNotNull(intent.getBundleExtra(SCOUT_ARGS_KEY))),
                     ActivityScoutListFragment.TAG)
             }
         }
@@ -30,9 +29,10 @@ internal class ScoutListActivity : ActivityBase() {
 
     companion object : ScoutListActivityCompanion {
         override fun createIntent(args: Bundle): Intent =
-                RobotScouter.intentFor<ScoutListActivity>(SCOUT_ARGS_KEY to args)
+                Intent(RobotScouter, ScoutListActivity::class.java)
+                        .putExtra(SCOUT_ARGS_KEY, args)
                         .putExtra("android.intent.extra.shortcut.SHELF_GROUP_ID", "scouts")
-                        .multipleTask()
+                        .addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
                         .addNewDocumentFlags()
     }
 }

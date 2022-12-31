@@ -1,13 +1,12 @@
 import com.android.build.gradle.BaseExtension
 import org.apache.commons.io.output.TeeOutputStream
-import org.jetbrains.kotlin.gradle.dsl.KotlinCommonToolOptions
+import org.jetbrains.kotlin.gradle.dsl.KotlinJvmOptions
+import org.jetbrains.kotlin.gradle.dsl.KotlinProjectExtension
 import org.jetbrains.kotlin.gradle.internal.AndroidExtensionsExtension
 import org.jetbrains.kotlin.gradle.internal.CacheImplementation
-import org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompile
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 buildscript {
-    Config.run { repositories.deps() }
+    repositories.deps()
 
     dependencies {
         classpath(Config.Plugins.android)
@@ -19,8 +18,8 @@ buildscript {
 }
 
 plugins {
+    `lifecycle-base`
     id("com.supercilex.robotscouter.build")
-    `build-scan`
     Config.Plugins.run { versionChecker }
 }
 
@@ -33,7 +32,7 @@ buildScan {
 }
 
 allprojects {
-    Config.run { repositories.deps() }
+    repositories.deps()
 
     configureGeneral()
     configureKtlint()
@@ -44,16 +43,17 @@ tasks.wrapper {
     distributionType = Wrapper.DistributionType.ALL
 }
 
-tasks.register<Delete>("clean") {
-    delete("build")
-}
-
 fun Project.configureGeneral() {
-    val compilerArgs: KotlinCommonToolOptions.() -> Unit = {
-        freeCompilerArgs = listOf("-progressive")
+    afterEvaluate {
+        convention.findByType<KotlinProjectExtension>()?.apply {
+            sourceSets.configureEach {
+                languageSettings.progressiveMode = true
+                languageSettings.enableLanguageFeature("NewInference")
+                languageSettings.useExperimentalAnnotation(
+                        "kotlinx.coroutines.ExperimentalCoroutinesApi")
+            }
+        }
     }
-    tasks.withType<KotlinCompile>().configureEach { kotlinOptions(compilerArgs) }
-    tasks.withType<Kotlin2JsCompile>().configureEach { kotlinOptions(compilerArgs) }
 }
 
 fun Project.configureKtlint() {
@@ -67,6 +67,7 @@ fun Project.configureKtlint() {
         main = "com.pinterest.ktlint.Main"
         classpath = ktlintConfig
         args = listOf("src/**/*.kt")
+        maxHeapSize = "100m"
 
         val output = File(buildDir, "reports/ktlint/log.txt")
         inputs.dir(fileTree("src").apply { include("**/*.kt") })
@@ -133,6 +134,10 @@ fun Project.configureAndroid() {
         compileOptions {
             sourceCompatibility = JavaVersion.VERSION_1_8
             targetCompatibility = JavaVersion.VERSION_1_8
+        }
+
+        (this as ExtensionAware).configure<KotlinJvmOptions> {
+            jvmTarget = "1.8"
         }
     }
 

@@ -9,8 +9,8 @@ import android.view.MenuItem
 import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.Guideline
-import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentManager
+import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.appbar.AppBarLayout.LayoutParams
@@ -19,7 +19,6 @@ import com.google.android.material.tabs.TabLayout
 import com.supercilex.robotscouter.Bridge
 import com.supercilex.robotscouter.Refreshable
 import com.supercilex.robotscouter.SignInResolver
-import com.supercilex.robotscouter.TemplateListFragmentBridge
 import com.supercilex.robotscouter.TemplateListFragmentCompanion
 import com.supercilex.robotscouter.TemplateListFragmentCompanion.Companion.TAG
 import com.supercilex.robotscouter.core.data.TAB_KEY
@@ -34,16 +33,16 @@ import com.supercilex.robotscouter.core.ui.LifecycleAwareLazy
 import com.supercilex.robotscouter.core.ui.RecyclerPoolHolder
 import com.supercilex.robotscouter.core.ui.animateChange
 import com.supercilex.robotscouter.core.ui.isInTabletMode
+import com.supercilex.robotscouter.core.ui.longSnackbar
 import com.supercilex.robotscouter.core.ui.onDestroy
 import com.supercilex.robotscouter.core.unsafeLazy
+import com.supercilex.robotscouter.shared.SharedLifecycleResource
 import kotlinx.android.synthetic.main.fragment_template_list.*
-import org.jetbrains.anko.design.longSnackbar
-import org.jetbrains.anko.find
 import com.supercilex.robotscouter.R as RC
 
 @Bridge
-internal class TemplateListFragment : FragmentBase(R.layout.fragment_template_list),
-        TemplateListFragmentBridge, Refreshable, View.OnClickListener, RecyclerPoolHolder {
+internal class TemplateListFragment : FragmentBase(R.layout.fragment_template_list), Refreshable,
+        View.OnClickListener, RecyclerPoolHolder {
     override val recyclerPool by LifecycleAwareLazy { RecyclerView.RecycledViewPool() }
 
     val pagerAdapter by unsafeLazy {
@@ -58,8 +57,13 @@ internal class TemplateListFragment : FragmentBase(R.layout.fragment_template_li
             }
         }
     }
-    val fab by unsafeLazy { requireActivity().find<FloatingActionButton>(RC.id.fab) }
-    private val appBar by unsafeLazy { requireActivity().find<AppBarLayout>(RC.id.appBar) }
+    private val sharedResources by activityViewModels<SharedLifecycleResource>()
+    val fab: FloatingActionButton by unsafeLazy {
+        requireActivity().findViewById(RC.id.fab)
+    }
+    private val appBar: AppBarLayout by unsafeLazy {
+        requireActivity().findViewById(RC.id.appBar)
+    }
     private val tabs by LifecycleAwareLazy {
         val tabs = TabLayout(ContextThemeWrapper(
                 requireContext(),
@@ -76,9 +80,9 @@ internal class TemplateListFragment : FragmentBase(R.layout.fragment_template_li
     } onDestroy {
         appBar.removeView(it)
     }
-    private val homeDivider by unsafeLazy {
+    private val homeDivider: Guideline? by unsafeLazy {
         val activity = requireActivity()
-        if (activity.isInTabletMode()) activity.find<Guideline>(RC.id.guideline) else null
+        if (activity.isInTabletMode()) activity.findViewById<Guideline>(RC.id.guideline) else null
     }
 
     private var savedState: Bundle? = null
@@ -93,6 +97,7 @@ internal class TemplateListFragment : FragmentBase(R.layout.fragment_template_li
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        sharedResources.onCreate(fab)
         animateContainerMorph(2f / 3)
 
         tabs // Force init
@@ -121,14 +126,13 @@ internal class TemplateListFragment : FragmentBase(R.layout.fragment_template_li
         super.onDestroyView()
         viewPager.adapter = null
         animateContainerMorph(1f / 3)
-        fab.apply {
+        sharedResources.onDestroy(fab) {
             setOnClickListener(null)
             hide()
-            isVisible = false // TODO hack: don't animate
         }
     }
 
-    override fun handleArgs(args: Bundle) {
+    fun handleArgs(args: Bundle) {
         if (view == null) {
             arguments = (arguments ?: Bundle()).apply { putAll(args) }
         } else {
@@ -208,7 +212,8 @@ internal class TemplateListFragment : FragmentBase(R.layout.fragment_template_li
         ): TemplateListFragment {
             val instance = manager.findFragmentByTag(TAG) as TemplateListFragment?
                     ?: TemplateListFragment()
-            return instance.apply { arguments = args }
+            args?.let { instance.handleArgs(args) }
+            return instance
         }
     }
 }

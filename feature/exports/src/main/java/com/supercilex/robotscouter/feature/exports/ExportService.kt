@@ -1,20 +1,25 @@
 package com.supercilex.robotscouter.feature.exports
 
-import android.Manifest
 import android.app.IntentService
+import android.content.ContentValues
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.view.View
-import androidx.annotation.RequiresPermission
+import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.firestore.DocumentSnapshot
 import com.supercilex.robotscouter.Bridge
 import com.supercilex.robotscouter.ExportServiceCompanion
+import com.supercilex.robotscouter.ExportServiceCompanion.Companion.PERMS_RC
+import com.supercilex.robotscouter.ExportServiceCompanion.Companion.perms
 import com.supercilex.robotscouter.core.CrashLogger
 import com.supercilex.robotscouter.core.InvocationMarker
 import com.supercilex.robotscouter.core.RobotScouter
-import com.supercilex.robotscouter.core.data.exportsFolder
 import com.supercilex.robotscouter.core.data.getTeamListExtra
 import com.supercilex.robotscouter.core.data.logExport
 import com.supercilex.robotscouter.core.data.model.getScouts
@@ -30,7 +35,9 @@ import com.supercilex.robotscouter.core.isOnline
 import com.supercilex.robotscouter.core.model.Scout
 import com.supercilex.robotscouter.core.model.Team
 import com.supercilex.robotscouter.core.model.TemplateType
-import com.supercilex.robotscouter.shared.PermissionRequestHandler
+import com.supercilex.robotscouter.core.ui.hasPerms
+import com.supercilex.robotscouter.core.ui.requestPerms
+import com.supercilex.robotscouter.core.ui.snackbar
 import com.supercilex.robotscouter.shared.RatingDialog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.GlobalScope
@@ -41,10 +48,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.asTask
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
-import org.jetbrains.anko.design.snackbar
-import org.jetbrains.anko.find
-import org.jetbrains.anko.intentFor
-import pub.devrel.easypermissions.EasyPermissions
 import java.io.File
 import java.util.concurrent.TimeUnit
 import com.supercilex.robotscouter.R as RC
@@ -55,13 +58,12 @@ class ExportService : IntentService(TAG) {
         setIntentRedelivery(true)
     }
 
-    @RequiresPermission(value = Manifest.permission.WRITE_EXTERNAL_STORAGE)
-    override fun onHandleIntent(intent: Intent) {
+    override fun onHandleIntent(intent: Intent?) {
         val notificationManager = ExportNotificationManager(this)
 
         if (isOffline) showToast(getString(R.string.export_offline_rationale))
 
-        val teams: List<Team> = intent.getTeamListExtra().toMutableList().apply { sort() }
+        val teams: List<Team> = intent?.getTeamListExtra().orEmpty().sorted()
         val chunks = teams.chunked(SYNCHRONOUS_QUERY_CHUNK)
         notificationManager.onStartLoading(chunks.size)
 
@@ -92,32 +94,63 @@ class ExportService : IntentService(TAG) {
         }
 
         val zippedScouts = zipScouts(newScouts)
-        val exportFolder = File(exportsFolder, "Robot Scouter export_${System.currentTimeMillis()}")
+        val exportFolder = if (Build.VERSION.SDK_INT >= 29) {
+            File(filesDir, "Documents/Export_${System.currentTimeMillis()}")
+        } else {
+            @Suppress("DEPRECATION")
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_DOWNLOADS)
+            File(downloadsDir, "Robot Scouter/Export_${System.currentTimeMillis()}")
+        }
 
         notificationManager.loaded(zippedScouts.size, newScouts.keys, exportFolder)
 
-        runBlocking {
+        val outboundUris = runBlocking {
             val templateNames = getTemplateNames(zippedScouts.keys)
             withTimeout(TimeUnit.MINUTES.toMillis(TIMEOUT)) {
                 zippedScouts.map { (templateId, scouts) ->
                     async {
-                        if (!notificationManager.isStopped()) {
-                            try {
-                                TemplateExporter(
-                                        scouts,
-                                        notificationManager,
-                                        exportFolder,
-                                        templateNames[templateId]
-                                ).export()
-                            } catch (t: Throwable) {
-                                notificationManager.abortCritical(t)
-                                throw CancellationException()
-                            }
+                        if (notificationManager.isStopped()) return@async null
+
+                        try {
+                            TemplateExporter(
+                                    scouts,
+                                    notificationManager,
+                                    exportFolder,
+                                    templateNames[templateId]
+                            ).export()
+                        } catch (t: Throwable) {
+                            notificationManager.abortCritical(t)
+                            throw CancellationException()
                         }
                     }
                 }.awaitAll()
             }
+        }.filterNotNull()
+
+        if (Build.VERSION.SDK_INT >= 29) {
+            try {
+                for ((file, uri) in outboundUris.flatten()) {
+                    copyFileToMediaStore(file, uri)
+                }
+            } finally {
+                exportFolder.deleteRecursively()
+            }
         }
+    }
+
+    @RequiresApi(29)
+    private fun copyFileToMediaStore(sheetFile: File, sheetUri: Uri) {
+        val resolver = RobotScouter.contentResolver
+        checkNotNull(resolver.openOutputStream(sheetUri)).use { output ->
+            sheetFile.inputStream().use { input ->
+                input.copyTo(output)
+            }
+        }
+
+        resolver.update(sheetUri, ContentValues().apply {
+            put(MediaStore.MediaColumns.IS_PENDING, 0)
+        }, null, null)
     }
 
     private suspend fun getTemplateNames(templateIds: Set<String>): Map<String, String?> {
@@ -186,15 +219,14 @@ class ExportService : IntentService(TAG) {
 
         override fun exportAndShareSpreadSheet(
                 activity: FragmentActivity,
-                permHandler: PermissionRequestHandler,
                 teams: List<Team>
         ): Boolean {
-            if (!EasyPermissions.hasPermissions(activity, *permHandler.perms.toTypedArray())) {
-                permHandler.requestPerms(activity, R.string.export_write_storage_rationale)
+            if (!hasPerms(perms)) {
+                activity.requestPerms(perms, R.string.export_write_storage_rationale, PERMS_RC)
                 return false
             }
 
-            activity.find<View>(RC.id.root)
+            activity.findViewById<View>(RC.id.root)
                     .snackbar(RobotScouter.getString(R.string.export_progress_hint))
 
             if (teams.isEmpty()) {
@@ -205,7 +237,7 @@ class ExportService : IntentService(TAG) {
                 exportedTeams.logExport()
                 ContextCompat.startForegroundService(
                         RobotScouter,
-                        RobotScouter.intentFor<ExportService>().putExtra(exportedTeams)
+                        Intent(RobotScouter, ExportService::class.java).putExtra(exportedTeams)
                 )
             }.addOnSuccessListener(activity) {
                 if (it.size >= MIN_TEAMS_TO_RATE && isOnline && shouldShowRatingDialog) {

@@ -9,12 +9,15 @@
 
 package com.supercilex.robotscouter.server.utils.types
 
-import com.supercilex.robotscouter.server.require
 import kotlin.js.Json
 import kotlin.js.Promise
 
-val functions = require("firebase-functions").unsafeCast<Functions>()
-val admin = require("firebase-admin").unsafeCast<Admin>()
+val functions by lazy { js("require('firebase-functions')").unsafeCast<Functions>() }
+val admin by lazy {
+    val admin = js("require('firebase-admin')").unsafeCast<Admin>()
+    admin.initializeApp()
+    admin
+}
 
 external val SDK_VERSION: String = definedExternally
 external val apps: Array<App> = definedExternally
@@ -77,7 +80,10 @@ external class Functions {
     val firestore: NamespaceBuilder = definedExternally
     val pubsub: Pubsub = definedExternally
     val https: Https = definedExternally
+    val auth: FunctionsAuth = definedExternally
+
     fun runWith(options: dynamic): Functions
+    fun config(): dynamic
 }
 
 external class Admin {

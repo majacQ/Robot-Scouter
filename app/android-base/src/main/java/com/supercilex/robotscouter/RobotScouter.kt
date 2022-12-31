@@ -10,17 +10,17 @@ import androidx.work.WorkManager
 import com.bumptech.glide.Glide
 import com.supercilex.robotscouter.core.RobotScouter
 import com.supercilex.robotscouter.core._globalContext
+import com.supercilex.robotscouter.core.data.client.initWork
 import com.supercilex.robotscouter.core.data.initAnalytics
 import com.supercilex.robotscouter.core.data.initDatabase
-import com.supercilex.robotscouter.core.data.initIo
 import com.supercilex.robotscouter.core.data.initNotifications
 import com.supercilex.robotscouter.core.data.initPrefs
 import com.supercilex.robotscouter.core.data.initRemoteConfig
+import com.supercilex.robotscouter.core.toast
 import com.supercilex.robotscouter.shared.initUi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import org.jetbrains.anko.toast
 
 internal class RobotScouter : MultiDexApplication(), Configuration.Provider {
     override fun onCreate() {
@@ -29,17 +29,19 @@ internal class RobotScouter : MultiDexApplication(), Configuration.Provider {
 
         GlobalScope.apply {
             // Prep slow init calls
-            launch(Dispatchers.IO) { initIo() }
+            launch(Dispatchers.IO) { initWork() }
+
+            launch { Dispatchers.Main }
             launch { initBridges() }
             launch { Glide.get(RobotScouter) }
             launch { WorkManager.getInstance(RobotScouter) }
 
-            launch { initAnalytics() }
             launch { initRemoteConfig() }
             launch { initNotifications() }
         }
 
         // These calls must occur synchronously
+        initAnalytics()
         initDatabase()
         initPrefs()
         initUi()
@@ -59,11 +61,16 @@ internal class RobotScouter : MultiDexApplication(), Configuration.Provider {
             StrictMode.setThreadPolicy(
                     StrictMode.ThreadPolicy.Builder()
                             .detectAll()
-                            .penaltyDeath()
+                            .penaltyFlashScreen()
                             .penaltyLog()
                             .build()
             )
         }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        Glide.get(this).onTrimMemory(level)
     }
 
     override fun getWorkManagerConfiguration() = Configuration.Builder().build()

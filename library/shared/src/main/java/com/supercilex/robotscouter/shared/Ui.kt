@@ -1,15 +1,12 @@
 package com.supercilex.robotscouter.shared
 
 import android.app.Activity
-import android.app.Application
-import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.NavUtils
 import androidx.core.app.TaskStackBuilder
 import androidx.core.provider.FontRequest
 import androidx.emoji.text.EmojiCompat
 import androidx.emoji.text.FontRequestEmojiCompatConfig
-import androidx.lifecycle.Lifecycle
 import com.firebase.ui.auth.AuthUI
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.firebase.auth.FirebaseAuth
@@ -17,21 +14,17 @@ import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.supercilex.robotscouter.core.RobotScouter
 import com.supercilex.robotscouter.core.data.ACTION_FROM_DEEP_LINK
 import com.supercilex.robotscouter.core.data.ChangeEventListenerBase
-import com.supercilex.robotscouter.core.data.activitiesRegistry
 import com.supercilex.robotscouter.core.data.cleanup
 import com.supercilex.robotscouter.core.data.nightMode
 import com.supercilex.robotscouter.core.data.prefs
 import com.supercilex.robotscouter.core.logBreadcrumb
+import com.supercilex.robotscouter.core.longToast
 import com.supercilex.robotscouter.shared.client.idpSignOut
 import com.supercilex.robotscouter.shared.client.onSignedIn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.invoke
 import kotlinx.coroutines.launch
-import org.jetbrains.anko.longToast
-import java.util.concurrent.CopyOnWriteArrayList
-
-private val visibleActivities = CopyOnWriteArrayList<Activity>()
 
 fun initUi() {
     GlobalScope.launch {
@@ -55,14 +48,11 @@ fun initUi() {
                 idpSignOut()
                 onSignedIn()
                 Dispatchers.Main {
-                    RobotScouter.longToast(
-                            "User account deleted due to inactivity. Starting a fresh session.")
+                    longToast("User account deleted due to inactivity. Starting a fresh session.")
                 }
             }
         }
     }
-
-    activitiesRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
 
     AppCompatDelegate.setDefaultNightMode(nightMode)
     prefs.addChangeEventListener(object : ChangeEventListenerBase {
@@ -70,8 +60,6 @@ fun initUi() {
             AppCompatDelegate.setDefaultNightMode(nightMode)
         }
     })
-
-    (RobotScouter as Application).registerActivityLifecycleCallbacks(ActivityHandler)
 
     EmojiCompat.init(FontRequestEmojiCompatConfig(
             RobotScouter,
@@ -94,30 +82,4 @@ fun Activity.handleUpNavigation() = if (
     finish()
 } else {
     NavUtils.navigateUpFromSameTask(this)
-}
-
-private object ActivityHandler : Application.ActivityLifecycleCallbacks {
-    override fun onActivityStarted(activity: Activity) {
-        if (visibleActivities.isEmpty()) {
-            activitiesRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-        }
-        visibleActivities += activity
-    }
-
-    override fun onActivityStopped(activity: Activity) {
-        visibleActivities -= activity
-        if (visibleActivities.isEmpty()) {
-            activitiesRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
-        }
-    }
-
-    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
-
-    override fun onActivityResumed(activity: Activity) = Unit
-
-    override fun onActivityPaused(activity: Activity) = Unit
-
-    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
-
-    override fun onActivityDestroyed(activity: Activity) = Unit
 }

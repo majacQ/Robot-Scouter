@@ -1,3 +1,7 @@
+plugins {
+    `gradle-enterprise`
+}
+
 include(
         ":app:android-base", "app:server:functions",
 
@@ -10,3 +14,5 @@ include(
         ":feature:exports",
         ":feature:trash", ":feature:settings"
 )
+
+rootProject.name = "Robot-Scouter"

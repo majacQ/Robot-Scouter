@@ -2,11 +2,15 @@ package com.supercilex.robotscouter.feature.exports
 
 import android.app.Notification
 import android.app.PendingIntent
+import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import androidx.annotation.PluralsRes
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.gson.Gson
@@ -21,12 +25,10 @@ import com.supercilex.robotscouter.common.isSingleton
 import com.supercilex.robotscouter.core.CrashLogger
 import com.supercilex.robotscouter.core.RobotScouter
 import com.supercilex.robotscouter.core.data.EXPORT_CHANNEL
-import com.supercilex.robotscouter.core.data.MIME_TYPE_ANY
 import com.supercilex.robotscouter.core.data.NotificationIntentForwarder
-import com.supercilex.robotscouter.core.data.hidden
+import com.supercilex.robotscouter.core.data.mimeType
 import com.supercilex.robotscouter.core.data.nullOrFull
 import com.supercilex.robotscouter.core.data.safeCreateNewFile
-import com.supercilex.robotscouter.core.data.unhide
 import com.supercilex.robotscouter.core.model.Metric
 import com.supercilex.robotscouter.core.model.MetricType
 import com.supercilex.robotscouter.core.model.Scout
@@ -59,7 +61,6 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.File
 import java.io.FileOutputStream
 import java.io.FileWriter
-import java.io.IOException
 import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -77,7 +78,7 @@ internal class TemplateExporter(
     val scouts: Map<Team, List<Scout>> = Collections.unmodifiableMap(scouts)
     private val cache = SpreadsheetCache(scouts.keys)
 
-    suspend fun export() = coroutineScope {
+    suspend fun export(): List<Pair<File, Uri>> = coroutineScope {
         val spreadsheet = async(Dispatchers.IO) { exportSpreadsheet() }
         val json = async(Dispatchers.IO) {
             try {
@@ -85,19 +86,22 @@ internal class TemplateExporter(
             } catch (e: Exception) {
                 // Log exceptions, but don't fail the export if we messed up
                 CrashLogger.onFailure(e)
+                null
             }
         }
 
-        val notification = spreadsheet.await()
+        val (sheetMetadata, notification) = spreadsheet.await()
         notificationManager.onStartJsonExport(this@TemplateExporter)
-        json.await()
+        val jsonMetadata = json.await()
 
         if (!notificationManager.isStopped()) {
             notificationManager.removeExporter(this@TemplateExporter, notification)
         }
+
+        listOfNotNull(sheetMetadata, jsonMetadata)
     }
 
-    private fun exportSpreadsheet(): NotificationCompat.Builder {
+    private fun exportSpreadsheet(): Pair<Pair<File, Uri>, NotificationCompat.Builder> {
         fun getPluralTeams(@PluralsRes id: Int, vararg args: Any): String =
                 RobotScouter.resources.getQuantityString(id, cache.teams.size, *args)
 
@@ -105,22 +109,27 @@ internal class TemplateExporter(
 
         val exportId = notificationManager.addExporter(this)
 
-        val spreadsheetUri: Uri = FileProvider.getUriForFile(
-                RobotScouter, providerAuthority, writeSpreadsheetFile())
+        val (file, spreadsheetUri) = insertFileIntoMediaStore(writeSpreadsheetFile())
+        if (Build.VERSION.SDK_INT < 29) {
+            @Suppress("DEPRECATION")
+            RobotScouter.sendBroadcast(Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE).apply {
+                data = file.toUri()
+            })
+        }
 
         val baseIntent = Intent()
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 .putStringArrayListExtra(Intent.EXTRA_CONTENT_ANNOTATIONS, arrayListOf("document"))
 
         val viewIntent = Intent(baseIntent).setAction(Intent.ACTION_VIEW)
-                .setDataAndType(spreadsheetUri, MIME_TYPE_MS_EXCEL)
+                .setDataAndType(spreadsheetUri, file.mimeType())
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         if (viewIntent.resolveActivity(RobotScouter.packageManager) == null) {
-            viewIntent.setDataAndType(spreadsheetUri, MIME_TYPE_ANY)
+            viewIntent.setDataAndType(spreadsheetUri, "*/*")
         }
 
         val chooserIntent = Intent(baseIntent).setAction(Intent.ACTION_SEND)
-                .setType(MIME_TYPE_MS_EXCEL)
+                .setType(file.mimeType())
                 .putExtra(Intent.EXTRA_STREAM, spreadsheetUri)
                 .putExtra(Intent.EXTRA_ALTERNATE_INTENTS, arrayOf(viewIntent))
         val sharePendingIntent = PendingIntent.getActivity(
@@ -136,7 +145,7 @@ internal class TemplateExporter(
                 PendingIntent.FLAG_ONE_SHOT
         )
 
-        return NotificationCompat.Builder(RobotScouter, EXPORT_CHANNEL)
+        val notification = NotificationCompat.Builder(RobotScouter, EXPORT_CHANNEL)
                 .setSmallIcon(R.drawable.ic_done_white_24dp)
                 .setContentTitle(RobotScouter.getString(
                         R.string.export_complete_title, templateName))
@@ -160,14 +169,40 @@ internal class TemplateExporter(
                 .setColor(colorPrimary)
                 .setDefaults(Notification.DEFAULT_ALL)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+
+        return (file to spreadsheetUri) to notification
     }
 
-    private fun exportJson() {
-        writeJsonFile(GsonBuilder()
-                              .setPrettyPrinting()
-                              .serializeNulls()
-                              .disableHtmlEscaping()
-                              .create())
+    private fun exportJson(): Pair<File, Uri> {
+        val gson = GsonBuilder()
+                .setPrettyPrinting()
+                .serializeNulls()
+                .disableHtmlEscaping()
+                .create()
+        return insertFileIntoMediaStore(writeJsonFile(gson))
+    }
+
+    private fun insertFileIntoMediaStore(file: File): Pair<File, Uri> {
+        if (Build.VERSION.SDK_INT < 29) {
+            return file to FileProvider.getUriForFile(RobotScouter, providerAuthority, file)
+        }
+
+        val parent = checkNotNull(exportFolder.parentFile)
+        val path = checkNotNull(file.parentFile).toRelativeString(parent)
+
+        val details = ContentValues().apply {
+            put(MediaStore.MediaColumns.MIME_TYPE, file.mimeType())
+            put(MediaStore.MediaColumns.TITLE, file.name)
+            put(MediaStore.MediaColumns.DISPLAY_NAME, file.nameWithoutExtension)
+            put(MediaStore.MediaColumns.DATE_ADDED, System.currentTimeMillis())
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/Robot Scouter/$path")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+
+        val resolver = RobotScouter.contentResolver
+        val contentUri = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+
+        return file to checkNotNull(resolver.insert(contentUri, details))
     }
 
     private fun writeSpreadsheetFile() = writeFile(spreadsheetFileExtension) {
@@ -181,7 +216,7 @@ internal class TemplateExporter(
     private inline fun writeFile(extension: String, write: File.() -> Unit): File {
         val file = createFile(extension)
         try {
-            return file.apply { write() }.unhide() ?: throw IOException("Couldn't unhide file")
+            return file.apply { write() }
         } catch (e: Exception) {
             file.delete()
             throw e
@@ -189,7 +224,7 @@ internal class TemplateExporter(
     }
 
     private fun createFile(extension: String) = synchronized(notificationManager) {
-        val availableFile = findAvailableFile(extension).hidden()
+        val availableFile = findAvailableFile(extension)
         try {
             availableFile.safeCreateNewFile()
         } catch (e: Exception) {
@@ -203,7 +238,7 @@ internal class TemplateExporter(
 
         var i = 1
         while (true) {
-            availableFile = if (availableFile.exists() || availableFile.hidden().exists()) {
+            availableFile = if (availableFile.exists()) {
                 File(exportFolder, getFileName(i, extension))
             } else {
                 return availableFile
@@ -345,7 +380,7 @@ internal class TemplateExporter(
         val header = teamSheet.createRow(0)
         header.createCell(0) // Create empty top left corner cell
 
-        var hasOutdatedMetrics = false
+        val outdatedMetrics = mutableSetOf<String>()
         for (i in scouts.lastIndex downTo 0) {
             val scout = scouts[i]
 
@@ -364,7 +399,7 @@ internal class TemplateExporter(
                 } else {
                     val metricIndex = metricCache[metric.ref.id]
                     if (metricIndex == null) {
-                        if (!hasOutdatedMetrics) {
+                        if (outdatedMetrics.isEmpty()) {
                             teamSheet.createRow(teamSheet.lastRowNum + 2).also {
                                 it.createCell(0).apply {
                                     setCellValue("Outdated metrics")
@@ -377,7 +412,7 @@ internal class TemplateExporter(
                         setupRow(metric, teamSheet.lastRowNum + 1)
                                 .also { setRowValue(metric, it, i + 1) }
 
-                        hasOutdatedMetrics = true
+                        outdatedMetrics += metric.ref.id
                     } else {
                         setRowValue(metric, teamSheet.getRow(metricIndex), i + 1)
                     }
@@ -389,10 +424,14 @@ internal class TemplateExporter(
                 team,
                 teamSheet.getRow(0).lastCellNum + if (scouts.isPolynomial) 0 else -1
         )
-        if (scouts.isPolynomial) buildCalculatedTeamSheetColumns(teamSheet, team)
+        if (scouts.isPolynomial) buildCalculatedTeamSheetColumns(teamSheet, team, outdatedMetrics)
     }
 
-    private fun buildCalculatedTeamSheetColumns(sheet: Sheet, team: Team) {
+    private fun buildCalculatedTeamSheetColumns(
+            sheet: Sheet,
+            team: Team,
+            ignoredMetrics: Set<String>
+    ) {
         fun createHeader(column: Int, title: String) {
             sheet.getRow(0).getCell(column, CREATE_NULL_AS_BLANK).apply {
                 setCellValue(title)
@@ -420,7 +459,8 @@ internal class TemplateExporter(
         val chartPool = mutableMapOf<Metric<*>, Chart>()
 
         for (i in 1..sheet.lastRowNum) {
-            val type = (cache.getRootMetric(team, i) ?: continue).type
+            val metric = cache.getRootMetric(team, i) ?: continue
+            val type = metric.type
             val row = sheet.getRow(i)
 
             val averageCell = row.createCellWithStyle(averageColumn)
@@ -445,7 +485,6 @@ internal class TemplateExporter(
                     averageCell.cellFormula = "AVERAGE($address)"
                     medianCell.cellFormula = "MEDIAN($address)"
                     maxCell.cellFormula = "MAX($address)"
-                    buildTeamChart(row, team, chartData, chartPool)
                 }
                 MetricType.STOPWATCH -> {
                     val computeIfPresent: (String) -> String = {
@@ -454,7 +493,6 @@ internal class TemplateExporter(
                     averageCell.cellFormula = computeIfPresent("AVERAGE($address)")
                     medianCell.cellFormula = computeIfPresent("MEDIAN($address)")
                     maxCell.cellFormula = computeIfPresent("MAX($address)")
-                    buildTeamChart(row, team, chartData, chartPool)
                 }
                 MetricType.TEXT ->
                     listOf(averageCell, medianCell, maxCell).forEach { it.cellFormula = "NA()" }
@@ -468,6 +506,11 @@ internal class TemplateExporter(
                     maxCell.cellFormula = "NA()"
                 }
             }
+
+            if (
+                (type == MetricType.NUMBER || type == MetricType.STOPWATCH) &&
+                !ignoredMetrics.contains(metric.ref.id)
+            ) buildTeamChart(row, team, chartData, chartPool)
         }
 
         for (chart in chartData.keys) {
@@ -667,7 +710,7 @@ internal class TemplateExporter(
                                 evaluator.evaluate(metricRow.getCell(start + 2))?.formatAsString()
                         )
                     }.let {
-                        val naToNull: (String?) -> String? = { if (it == "#N/A") null else it }
+                        val naToNull: (String?) -> String? = { it.takeUnless { it == "#N/A" } }
                         it.map { it.first }.map(naToNull) to it.map { it.second }.map(naToNull)
                     }
 
@@ -830,7 +873,6 @@ internal class TemplateExporter(
     }
 
     private companion object {
-        const val MIME_TYPE_MS_EXCEL = "application/vnd.ms-excel"
         const val JSON_FILE_EXTENSION = ".json"
 
         val spreadsheetFileExtension = if (isSupportedDevice) ".xlsx" else ".xls"

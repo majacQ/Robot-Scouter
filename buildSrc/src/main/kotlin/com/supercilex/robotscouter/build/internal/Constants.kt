@@ -1,28 +1,31 @@
 package com.supercilex.robotscouter.build.internal
 
 import child
-import org.gradle.api.Project
 import org.gradle.api.Task
-import java.io.File
+import org.gradle.api.file.RegularFile
 
 internal val isCi = System.getenv("CI") != null
-internal val isMaster = System.getenv("TRAVIS_BRANCH") == "master"
-internal val isPr = System.getenv("TRAVIS_PULL_REQUEST") ?: "false" != "false"
-internal val isRelease = isMaster && !isPr
+internal val isRelease = System.getenv("ROBOT_SCOUTER_RELEASE") != null
 
-internal val Task.secrets get() = project.secrets
-internal val Project.secrets: List<File>
+internal val Task.secrets: Secrets
     get() {
         val rootProject = project.rootProject
-        val android = rootProject.child("android-base").projectDir
+        val android = rootProject.child("android-base").layout.projectDirectory
 
-        return listOf(
-                File(android, "keystore.jks"),
-                File(android, "keystore.properties"),
-                File(android, "upload-keystore.jks"),
-                File(android, "upload-keystore.properties"),
-                File(android, "google-services.json"),
-                File(android, "google-play-auto-publisher.json"),
-                File(rootProject.child("core-data").projectDir, "src/main/res/values/config.xml")
+        val ci = listOf(
+                android.file("upload-keystore.jks"),
+                android.file("upload-keystore.properties"),
+                android.file("google-services.json"),
+                android.file("google-play-auto-publisher.json"),
+                rootProject.child("core-data").layout.projectDirectory
+                        .file("src/main/res/values/config.xml")
         )
+        val full = ci + listOf(
+                android.file("keystore.jks"),
+                android.file("keystore.properties")
+        )
+
+        return Secrets(full, ci)
     }
+
+internal data class Secrets(val full: List<RegularFile>, val ci: List<RegularFile>)

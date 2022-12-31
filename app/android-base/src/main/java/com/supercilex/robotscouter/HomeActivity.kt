@@ -9,6 +9,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewOutlineProvider
+import androidx.activity.viewModels
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.core.net.toUri
 import androidx.core.view.GravityCompat
@@ -18,7 +19,6 @@ import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
 import androidx.fragment.app.commit
 import androidx.fragment.app.commitNow
-import androidx.lifecycle.observe
 import androidx.transition.TransitionInflater
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.instantapps.InstantApps
@@ -33,7 +33,6 @@ import com.supercilex.robotscouter.core.data.TEMPLATE_ARGS_KEY
 import com.supercilex.robotscouter.core.data.asLiveData
 import com.supercilex.robotscouter.core.data.enableAutoScout
 import com.supercilex.robotscouter.core.data.getTeam
-import com.supercilex.robotscouter.core.data.ioPerms
 import com.supercilex.robotscouter.core.data.isSignedIn
 import com.supercilex.robotscouter.core.data.isTemplateEditingAllowed
 import com.supercilex.robotscouter.core.data.logFailures
@@ -42,27 +41,25 @@ import com.supercilex.robotscouter.core.data.minimumAppVersion
 import com.supercilex.robotscouter.core.data.prefs
 import com.supercilex.robotscouter.core.fastAddOnSuccessListener
 import com.supercilex.robotscouter.core.fullVersionCode
+import com.supercilex.robotscouter.core.longToast
 import com.supercilex.robotscouter.core.model.Team
 import com.supercilex.robotscouter.core.ui.ActivityBase
+import com.supercilex.robotscouter.core.ui.hasPermsOnActivityResult
+import com.supercilex.robotscouter.core.ui.hasPermsOnRequestPermissionsResult
 import com.supercilex.robotscouter.core.ui.isInTabletMode
 import com.supercilex.robotscouter.core.ui.showStoreListing
 import com.supercilex.robotscouter.core.ui.transitionAnimationDuration
 import com.supercilex.robotscouter.core.unsafeLazy
-import com.supercilex.robotscouter.shared.PermissionRequestHandler
 import com.supercilex.robotscouter.shared.launchUrl
-import com.supercilex.robotscouter.shared.stateViewModels
 import kotlinx.android.synthetic.main.activity_home_base.*
 import kotlinx.android.synthetic.main.activity_home_content.*
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import org.jetbrains.anko.intentFor
-import org.jetbrains.anko.longToast
 
 internal class HomeActivity : ActivityBase(), NavigationView.OnNavigationItemSelectedListener,
         TeamSelectionListener, DrawerToggler, TeamExporter, SignInResolver {
     private val authHelper by unsafeLazy { AuthHelper(this) }
-    private val permHandler by stateViewModels<PermissionRequestHandler>()
-    private val moduleRequestHolder by stateViewModels<ModuleRequestHolder>()
+    private val moduleRequestHolder by viewModels<ModuleRequestHolder>()
 
     private val updateManager by lazy { AppUpdateManagerFactory.create(this) }
 
@@ -120,15 +117,13 @@ internal class HomeActivity : ActivityBase(), NavigationView.OnNavigationItemSel
             updateBottomNavStatusAfterTeamSelection()
         }
 
-        permHandler.init(ioPerms)
-        permHandler.onGranted.observe(this) { export() }
         moduleRequestHolder.onSuccess.observe(this) { (comp, args) ->
-            @Suppress("UNCHECKED_CAST") // We know our inputs
-            when (comp) {
-                is ExportServiceCompanion -> if (
-                    comp.exportAndShareSpreadSheet(this, permHandler, args.single() as List<Team>)
-                ) onBackPressedDispatcher.onBackPressed()
-            }
+            if (
+                comp is ExportServiceCompanion &&
+                @Suppress("UNCHECKED_CAST") // We know our inputs
+                comp.exportAndShareSpreadSheet(this, args.single() as List<Team>) &&
+                onBackPressedDispatcher.hasEnabledCallbacks()
+            ) onBackPressedDispatcher.onBackPressed()
         }
 
         setSupportActionBar(toolbar)
@@ -257,7 +252,9 @@ internal class HomeActivity : ActivityBase(), NavigationView.OnNavigationItemSel
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         authHelper.onActivityResult(requestCode, resultCode, data)
-        permHandler.onActivityResult(requestCode, resultCode, data)
+        if (hasPermsOnActivityResult(ExportServiceCompanion.perms, requestCode)) {
+            export()
+        }
     }
 
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
@@ -378,7 +375,12 @@ internal class HomeActivity : ActivityBase(), NavigationView.OnNavigationItemSel
             grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        permHandler.onRequestPermissionsResult(this, requestCode, permissions, grantResults)
+        if (
+            requestCode == ExportServiceCompanion.PERMS_RC &&
+            hasPermsOnRequestPermissionsResult(permissions, grantResults)
+        ) {
+            export()
+        }
     }
 
     override fun onTrimMemory(level: Int) {
@@ -403,23 +405,23 @@ internal class HomeActivity : ActivityBase(), NavigationView.OnNavigationItemSel
         val selectedTeams = supportFragmentManager.fragments
                 .filterIsInstance<SelectedTeamsRetriever>()
                 .map { it.selectedTeams }
-                .singleOrNull { it.isNotEmpty() } ?: emptyList()
+                .singleOrNull { it.isNotEmpty() }
+                .orEmpty()
 
         moduleRequestHolder += ExportServiceCompanion().logFailures("downloadExportModule") to
                 listOf(selectedTeams)
     }
 
     private fun handleIntent() {
-        intent.extras?.run {
+        intent.extras?.apply {
             when {
                 containsKey(SCOUT_ARGS_KEY) ->
                     onTeamSelected(checkNotNull(getBundle(SCOUT_ARGS_KEY)))
                 containsKey(TEMPLATE_ARGS_KEY) -> {
                     val args = checkNotNull(getBundle(TEMPLATE_ARGS_KEY))
                     if (bottomNavigation.selectedItemId == R.id.templates) {
-                        (TemplateListFragmentCompanion()
-                                .getInstance(supportFragmentManager) as TemplateListFragmentBridge)
-                                .handleArgs(args)
+                        // Handles args
+                        TemplateListFragmentCompanion().getInstance(supportFragmentManager, args)
                     } else {
                         bottomNavigation.selectedItemId = R.id.templates
                     }
@@ -442,7 +444,7 @@ internal class HomeActivity : ActivityBase(), NavigationView.OnNavigationItemSel
         // along to the LinkReceiverActivity
         FirebaseDynamicLinks.getInstance().getDynamicLink(intent).addOnSuccessListener(this) {
             it?.link?.let {
-                startActivity(intentFor<LinkReceiverActivity>().setData(it))
+                startActivity(Intent(this, LinkReceiverActivity::class.java).setData(it))
             }
         }.addOnFailureListener(this) {
             longToast(R.string.link_uri_parse_error)

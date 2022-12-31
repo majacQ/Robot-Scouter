@@ -17,7 +17,7 @@ const val TEMPLATE_ARGS_KEY = "template_args"
 const val KEY_ADD_SCOUT = "add_scout"
 const val KEY_OVERRIDE_TEMPLATE_KEY = "override_template_key"
 
-fun <T : CharSequence> T?.nullOrFull() = if (isNullOrBlank()) null else this
+fun <T : CharSequence> T?.nullOrFull() = takeUnless { isNullOrBlank() }
 
 fun Bundle.putRef(ref: DocumentReference) = putString(REF_KEY, ref.path)
 
@@ -29,7 +29,7 @@ fun Intent.putExtra(teams: List<Team>): Intent = putExtra(TEAMS_KEY, ArrayList(t
 
 fun Bundle.getTeam(): Team = checkNotNull(getParcelable(TEAM_KEY))
 
-fun Intent.getTeamListExtra(): List<Team> = getParcelableArrayListExtra(TEAMS_KEY)
+fun Intent.getTeamListExtra(): List<Team> = getParcelableArrayListExtra<Team>(TEAMS_KEY).orEmpty()
 
 fun getTabIdBundle(key: String?) = bundleOf(TAB_KEY to key)
 

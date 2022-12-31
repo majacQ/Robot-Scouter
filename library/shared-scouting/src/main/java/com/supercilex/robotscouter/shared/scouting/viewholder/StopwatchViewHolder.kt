@@ -23,6 +23,7 @@ import com.supercilex.robotscouter.core.data.model.add
 import com.supercilex.robotscouter.core.data.model.remove
 import com.supercilex.robotscouter.core.model.Metric
 import com.supercilex.robotscouter.core.ui.RecyclerPoolHolder
+import com.supercilex.robotscouter.core.ui.longSnackbar
 import com.supercilex.robotscouter.core.ui.notifyItemsNoChangeAnimation
 import com.supercilex.robotscouter.core.ui.setOnLongClickListenerCompat
 import com.supercilex.robotscouter.core.unsafeLazy
@@ -38,8 +39,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
-import org.jetbrains.anko.design.longSnackbar
-import org.jetbrains.anko.find
 import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -73,7 +72,7 @@ open class StopwatchViewHolder(
 
         cycles.layoutManager = LinearLayoutManager(
                 itemView.context,
-                LinearLayoutManager.HORIZONTAL,
+                RecyclerView.HORIZONTAL,
                 false
         ).apply {
             initialPrefetchItemCount = 6
@@ -81,7 +80,8 @@ open class StopwatchViewHolder(
         cycles.adapter = cyclesAdapter
         GravitySnapHelper(Gravity.START).attachToRecyclerView(cycles)
 
-        cycles.setRecycledViewPool((fragment.parentFragment as RecyclerPoolHolder).recyclerPool)
+        cycles.setRecycledViewPool(
+                (fragment.requireParentFragment() as RecyclerPoolHolder).recyclerPool)
     }
 
     override fun bind() {
@@ -153,6 +153,10 @@ open class StopwatchViewHolder(
             cyclesAdapter.notifyItemChanged(0)
 
             updateCycleNames(position, size)
+
+            if (size >= LIST_SIZE_WITH_AVERAGE) {
+                cycles.post { cycles.smoothScrollToPosition(position) }
+            }
         }
     }
 
@@ -228,7 +232,7 @@ open class StopwatchViewHolder(
         var holder: StopwatchViewHolder?
             get() = _holder.get()?.takeIf { it.metric.ref == metric.ref }
             set(holder) {
-                _holder = WeakReference<StopwatchViewHolder>(holder)
+                _holder = WeakReference(checkNotNull(holder))
             }
 
         /** @return the time since this class was instantiated in milliseconds */
@@ -327,8 +331,8 @@ open class StopwatchViewHolder(
 
     private abstract class DataHolder(itemView: View) : RecyclerView.ViewHolder(itemView),
             View.OnCreateContextMenuListener, MenuItem.OnMenuItemClickListener {
-        protected val title: TextView = itemView.find(android.R.id.text1)
-        protected val value: TextView = itemView.find(android.R.id.text2)
+        protected val title: TextView = itemView.findViewById(R.id.title)
+        protected val value: TextView = itemView.findViewById(R.id.value)
 
         /**
          * The outclass's instance. Used indirectly since this ViewHolder may be recycled across
@@ -403,6 +407,7 @@ open class StopwatchViewHolder(
         val TIMERS = ConcurrentHashMap<DocumentReference, Timer>()
 
         const val LIST_SIZE_WITH_AVERAGE = 2
+
         // Don't conflict with metric types since the pool is shared
         const val DATA_ITEM = 1000
         const val AVERAGE_ITEM = 1001

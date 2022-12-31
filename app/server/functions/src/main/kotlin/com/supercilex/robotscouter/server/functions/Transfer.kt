@@ -21,6 +21,7 @@ import com.supercilex.robotscouter.server.utils.deletionQueue
 import com.supercilex.robotscouter.server.utils.duplicateTeams
 import com.supercilex.robotscouter.server.utils.epoch
 import com.supercilex.robotscouter.server.utils.firestore
+import com.supercilex.robotscouter.server.utils.getAsMap
 import com.supercilex.robotscouter.server.utils.getTeamsQuery
 import com.supercilex.robotscouter.server.utils.getTemplatesQuery
 import com.supercilex.robotscouter.server.utils.getTrashedTeamsQuery
@@ -29,6 +30,7 @@ import com.supercilex.robotscouter.server.utils.processInBatches
 import com.supercilex.robotscouter.server.utils.teams
 import com.supercilex.robotscouter.server.utils.toMap
 import com.supercilex.robotscouter.server.utils.toTeamString
+import com.supercilex.robotscouter.server.utils.types.AuthContext
 import com.supercilex.robotscouter.server.utils.types.CallableContext
 import com.supercilex.robotscouter.server.utils.types.Change
 import com.supercilex.robotscouter.server.utils.types.DeltaDocumentSnapshot
@@ -52,11 +54,16 @@ import kotlin.js.Promise
 import kotlin.js.json
 
 fun transferUserData(data: Json, context: CallableContext): Promise<*>? {
-    val auth = context.auth
+    val auth = context.auth ?: throw HttpsError("unauthenticated")
+    return GlobalScope.async {
+        transferUserData(auth, data)
+    }.asPromise()
+}
+
+suspend fun transferUserData(auth: AuthContext, data: Json) {
     val token = data[FIRESTORE_TOKEN] as? String
     val prevUid = data[FIRESTORE_PREV_UID] as? String
 
-    if (auth == null) throw HttpsError("unauthenticated")
     if (token == null || prevUid == null) throw HttpsError("invalid-argument")
     if (prevUid == auth.uid) {
         throw HttpsError("already-exists", "Cannot add and remove the same user")
@@ -115,29 +122,32 @@ fun transferUserData(data: Json, context: CallableContext): Promise<*>? {
         ), SetOptions.merge).await()
     }
 
-    return GlobalScope.async {
-        val prevToken = users.doc(prevUid).get().await().get<String?>(FIRESTORE_TOKEN)
-        if (prevToken == null || token != prevToken) throw HttpsError("permission-denied")
+    val prevToken = users.doc(prevUid).get().await().get<String?>(FIRESTORE_TOKEN)
+    if (prevToken == null || token != prevToken) throw HttpsError("permission-denied")
 
-        // Since it's too late of the user to un-sign-in, we use a SupervisorJob to maximize the
-        // success rate of the overall operation.
-        val scope = CoroutineScope(SupervisorJob())
-        awaitAll(
-                scope.async { mergePrefs() },
-                scope.async { mergeDeletionQueue() },
-                scope.async { mergeShareables() }
-        )
-        queueOldUserForDeletion()
-    }.asPromise()
+    // Since it's too late of the user to un-sign-in, we use a SupervisorJob to maximize the
+    // success rate of the overall operation.
+    val scope = CoroutineScope(SupervisorJob())
+    awaitAll(
+            scope.async { mergePrefs() },
+            scope.async { mergeDeletionQueue() },
+            scope.async { mergeShareables() }
+    )
+    queueOldUserForDeletion()
 }
 
 fun updateOwners(data: Json, context: CallableContext): Promise<*>? {
-    val auth = context.auth
+    val auth = context.auth ?: throw HttpsError("unauthenticated")
+    return GlobalScope.async {
+        updateOwners(auth, data)
+    }.asPromise()
+}
+
+suspend fun updateOwners(auth: AuthContext, data: Json) {
     val token = data[FIRESTORE_TOKEN] as? String
     val path = data[FIRESTORE_REF] as? String
     val prevUid = data[FIRESTORE_PREV_UID]
 
-    if (auth == null) throw HttpsError("unauthenticated")
     if (token == null || path == null) throw HttpsError("invalid-argument")
     if (prevUid != null) {
         if (prevUid !is String) {
@@ -166,32 +176,30 @@ fun updateOwners(data: Json, context: CallableContext): Promise<*>? {
     val oldOwnerPath = prevUid?.let { "$FIRESTORE_OWNERS.$it" }
     val newOwnerPath = "$FIRESTORE_OWNERS.${auth.uid}"
 
-    return GlobalScope.async {
-        val content = ref.get().await()
+    val content = ref.get().await()
 
-        if (!content.exists) throw HttpsError("not-found")
-        if (content.get<Json>(FIRESTORE_ACTIVE_TOKENS)[token] == null) {
-            throw HttpsError("permission-denied", "Token $token is invalid for $path")
-        }
+    if (!content.exists) throw HttpsError("not-found")
+    if (content.getAsMap<Any?>(FIRESTORE_ACTIVE_TOKENS)[token] == null) {
+        throw HttpsError("permission-denied", "Token $token is invalid for $path")
+    }
 
-        firestore.batch {
-            oldOwnerPath?.let {
-                update(ref, it, FieldValues.delete())
-                if (isTeam) {
-                    set(duplicateTeams.doc(prevUid),
-                        json(ref.id to FieldValues.delete()),
-                        SetOptions.merge)
-                }
-            }
-
-            update(ref, newOwnerPath, value)
+    firestore.batch {
+        oldOwnerPath?.let {
+            update(ref, it, FieldValues.delete())
             if (isTeam) {
-                set(duplicateTeams.doc(auth.uid),
-                    json(ref.id to content.get(FIRESTORE_NUMBER)),
+                set(duplicateTeams.doc(prevUid),
+                    json(ref.id to FieldValues.delete()),
                     SetOptions.merge)
             }
         }
-    }.asPromise()
+
+        update(ref, newOwnerPath, value)
+        if (isTeam) {
+            set(duplicateTeams.doc(auth.uid),
+                json(ref.id to content.get(FIRESTORE_NUMBER)),
+                SetOptions.merge)
+        }
+    }
 }
 
 fun mergeDuplicateTeams(event: Change<DeltaDocumentSnapshot>): Promise<*>? {
@@ -226,7 +234,7 @@ fun mergeDuplicateTeams(event: Change<DeltaDocumentSnapshot>): Promise<*>? {
                     val teams = ids.map { teams.doc(it).get() }
                             .map { it.await() }
                             .apply { if (any { !it.exists }) return@inner }
-                            .associate { it to it.ref.collection(FIRESTORE_SCOUTS).get() }
+                            .associateWith { it.ref.collection(FIRESTORE_SCOUTS).get() }
                             .mapValues { (_, scout) -> scout.await().docs }
                             .mapValues { (_, scouts) ->
                                 scouts.associate { it to it.ref.collection(FIRESTORE_METRICS).get() }
@@ -288,7 +296,7 @@ fun mergeDuplicateTeams(event: Change<DeltaDocumentSnapshot>): Promise<*>? {
                             }
                         }.awaitAll()
 
-                        for ((owner) in merge.get<Json>(FIRESTORE_OWNERS).toMap<Any>()) {
+                        for ((owner) in merge.getAsMap<Any>(FIRESTORE_OWNERS)) {
                             t.set(duplicateTeams.doc(owner),
                                   json(merge.id to FieldValues.delete()),
                                   SetOptions.merge)
