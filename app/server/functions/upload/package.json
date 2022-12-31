@@ -36,10 +36,14 @@
     "kotlinx-coroutines-core": "1.3.4",
     "lru-cache": "7.14.1",
     "moment": "2.24.0",
+  <<<<<<< snyk-upgrade-50ab7223c445d17fc6e3dfd373daecda
+    "superagent": "8.0.3"
+  =======
   <<<<<<< snyk-upgrade-92d960bdb8fbb254f78bcf5f00e4ce05
     "superagent": "8.0.4"
   =======
     "superagent": "8.0.5"
+  >>>>>>> instant-apps
   >>>>>>> instant-apps
   },
   "private": true,
