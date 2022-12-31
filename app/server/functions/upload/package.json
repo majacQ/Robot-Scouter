@@ -23,6 +23,9 @@
     "firebase-functions": "3.24.0",
   >>>>>>> instant-apps
     "kotlin": "1.3.70",
+  <<<<<<< snyk-upgrade-4a23c0739ad6b7f5243408da50d6b63d
+    "kotlinx-coroutines-core": "1.6.3",
+  =======
   <<<<<<< snyk-upgrade-a9d3a105312c1f8b9af552fb3eb596bb
     "kotlinx-coroutines-core": "1.6.4",
   =======
@@ -67,6 +70,7 @@
     "kotlin": "1.3.70",
   <<<<<<< snyk-upgrade-9c662271d1b100099dd75695d0b7ad55
     "kotlinx-coroutines-core": "1.6.1",
+  >>>>>>> instant-apps
   >>>>>>> instant-apps
   >>>>>>> instant-apps
     "lru-cache": "5.1.1",
