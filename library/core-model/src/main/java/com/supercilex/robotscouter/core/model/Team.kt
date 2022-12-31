@@ -1,12 +1,11 @@
 package com.supercilex.robotscouter.core.model
 
 import android.os.Parcelable
-import android.support.annotation.Keep
-import android.support.annotation.RestrictTo
+import androidx.annotation.Keep
+import androidx.annotation.RestrictTo
+import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.Exclude
-import com.google.firebase.firestore.PropertyName
 import com.google.gson.annotations.SerializedName
-import com.supercilex.robotscouter.common.FIRESTORE_TIMESTAMP
 import kotlinx.android.parcel.Parcelize
 import java.util.Date
 
@@ -19,7 +18,9 @@ data class Team(
         var number: Long,
 
         @Exclude
-        @get:Exclude
+        @get:Keep
+        @get:DocumentId
+        @set:Keep
         var id: String,
 
         @Exclude
@@ -27,12 +28,6 @@ data class Team(
         @set:Keep
         @set:RestrictTo(RestrictTo.Scope.TESTS)
         var owners: Map<String, Long> = emptyMap(),
-
-        @Exclude
-        @get:Keep
-        @set:Keep
-        @set:RestrictTo(RestrictTo.Scope.TESTS)
-        var activeTokens: Map<String, Date> = emptyMap(),
 
         @Exclude
         @get:Keep
@@ -50,7 +45,6 @@ data class Team(
         @set:Keep
         var media: String? = null,
 
-        @SerializedName("website")
         @Exclude
         @get:Keep
         @set:Keep
@@ -72,8 +66,7 @@ data class Team(
         var hasCustomWebsite: Boolean = false,
 
         @Exclude
-        @get:Keep
-        @set:Keep
+        @get:Exclude
         var shouldUploadMediaToTba: Boolean = false,
 
         @Exclude
@@ -82,17 +75,12 @@ data class Team(
         var mediaYear: Int = 0,
 
         @Exclude
-        @get:Exclude
+        @get:Keep
         @set:Keep
-        @set:RestrictTo(RestrictTo.Scope.TESTS)
         var timestamp: Date = Date(0)
 ) : Parcelable, Comparable<Team> {
     // Empty no-arg constructor for Firebase
     constructor() : this(0, "")
-
-    @Keep
-    @PropertyName(FIRESTORE_TIMESTAMP)
-    fun getCurrentTimestamp() = Date()
 
     override fun toString() = if (name.isNullOrBlank()) {
         number.toString()

@@ -1,32 +1,34 @@
 package com.supercilex.robotscouter.shared
 
 import android.content.Intent
-import android.support.annotation.Size
-import android.support.v4.app.Fragment
+import androidx.annotation.Size
 import androidx.core.net.toUri
-import com.google.android.gms.appinvite.AppInviteInvitation
-import com.google.android.gms.appinvite.AppInviteInvitation.IntentBuilder.MAX_MESSAGE_LENGTH
+import androidx.fragment.app.Fragment
 import com.google.firebase.appindexing.Action
 import com.google.firebase.appindexing.FirebaseUserActions
+import com.google.firebase.dynamiclinks.DynamicLink
+import com.google.firebase.dynamiclinks.FirebaseDynamicLinks
+import com.supercilex.robotscouter.common.isSingleton
 import com.supercilex.robotscouter.core.CrashLogger
 import com.supercilex.robotscouter.core.RobotScouter
 import com.supercilex.robotscouter.core.asLifecycleReference
 import com.supercilex.robotscouter.core.data.CachingSharer
 import com.supercilex.robotscouter.core.data.getTeamsLink
-import com.supercilex.robotscouter.core.data.isSingleton
+import com.supercilex.robotscouter.core.data.logFailures
 import com.supercilex.robotscouter.core.data.logShare
 import com.supercilex.robotscouter.core.data.model.TeamCache
 import com.supercilex.robotscouter.core.data.model.getNames
 import com.supercilex.robotscouter.core.data.model.ref
 import com.supercilex.robotscouter.core.data.model.shareTeams
 import com.supercilex.robotscouter.core.isOffline
-import com.supercilex.robotscouter.core.logFailures
+import com.supercilex.robotscouter.core.logBreadcrumb
 import com.supercilex.robotscouter.core.model.Team
-import kotlinx.coroutines.experimental.android.UI
-import kotlinx.coroutines.experimental.async
-import kotlinx.coroutines.experimental.launch
-import org.jetbrains.anko.design.longSnackbar
-import org.jetbrains.anko.support.v4.find
+import com.supercilex.robotscouter.core.ui.longSnackbar
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.invoke
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 class TeamSharer private constructor(
         fragment: Fragment,
@@ -58,37 +60,57 @@ class TeamSharer private constructor(
         }
 
     init {
-        val fragmentRef = fragment.asLifecycleReference()
-        launch(UI) {
-            val intent = try {
-                async { generateIntent() }.await()
+        val fragmentRef = fragment.asLifecycleReference(fragment.viewLifecycleOwner)
+        GlobalScope.launch(Dispatchers.Main) {
+            try {
+                val intent = Dispatchers.Default { generateIntent() }
+                fragmentRef().startActivityForResult(intent, RC_SHARE)
             } catch (e: Exception) {
                 CrashLogger.onFailure(e)
-                longSnackbar(fragmentRef().find(R.id.root), R.string.error_unknown)
+                fragmentRef().requireView().longSnackbar(R.string.error_unknown)
                 return@launch
             }
-            fragmentRef().startActivityForResult(intent, RC_SHARE)
         }
     }
 
     private suspend fun generateIntent(): Intent {
-        // Called first to skip token generation if task failed
-        val htmlTemplate = loadFile(FILE_NAME)
         val token = cache.teams.map { it.ref }.shareTeams()
 
-        return getInvitationIntent(
-                cache.teams.getTeamsLink(token),
-                htmlTemplate.format(cache.shareCta, cache.teams.first().media)
-        )
+        return getInvitationIntent(cache.teams.getTeamsLink(token))
     }
 
-    private fun getInvitationIntent(deepLink: String, shareTemplate: String) =
-            AppInviteInvitation.IntentBuilder(cache.shareTitle)
-                    .setMessage(safeMessage)
-                    .setDeepLink(deepLink.toUri())
-                    .setEmailSubject(cache.shareCta)
-                    .setEmailHtmlContent(shareTemplate)
-                    .build()
+    private suspend fun getInvitationIntent(deepLink: String): Intent {
+        val mediaUri = cache.teams.mapNotNull { it.media?.toUri() }.firstOrNull()
+
+        val link = FirebaseDynamicLinks.getInstance().createDynamicLink()
+                .setLink(deepLink.toUri())
+                .setDomainUriPrefix("https://robotscouter.page.link")
+                .setAndroidParameters(DynamicLink.AndroidParameters.Builder().build())
+                .setSocialMetaTagParameters(
+                        DynamicLink.SocialMetaTagParameters.Builder()
+                                .setTitle(cache.shareCta)
+                                .setDescription(safeMessage)
+                                .apply { mediaUri?.let { setImageUrl(it) } }
+                                .build()
+                )
+                .buildShortDynamicLink()
+                .await()
+        // TODO https://github.com/firebase/firebase-android-sdk/pull/1084
+        @Suppress("UselessCallOnNotNull")
+        if (link.warnings.orEmpty().isNotEmpty()) {
+            val warnings = link.warnings.joinToString { it.message.toString() }
+            logBreadcrumb("Dynamic link warnings: $warnings")
+        }
+
+        val shareIntent = Intent(Intent.ACTION_SEND)
+                .setType("text/plain")
+                .putExtra(Intent.EXTRA_SUBJECT, cache.shareCta)
+                .putExtra(
+                        Intent.EXTRA_TEXT,
+                        cache.shareMessage + "\n\n" + link.shortLink
+                )
+        return Intent.createChooser(shareIntent, cache.shareTitle)
+    }
 
     private inner class Cache(teams: Collection<Team>) : TeamCache(teams) {
         val shareMessage: String
@@ -110,14 +132,14 @@ class TeamSharer private constructor(
 
     companion object {
         private const val RC_SHARE = 9
-        private const val FILE_NAME = "share_team_template.html"
+        private const val MAX_MESSAGE_LENGTH = 100
 
         /**
          * @return true if a share intent was launched, false otherwise
          */
         fun shareTeams(fragment: Fragment, @Size(min = 1) teams: List<Team>): Boolean {
             if (isOffline) {
-                longSnackbar(fragment.find(R.id.root), R.string.no_connection)
+                fragment.requireView().longSnackbar(R.string.no_connection)
                 return false
             }
             if (teams.isEmpty()) return false
@@ -128,7 +150,7 @@ class TeamSharer private constructor(
                             .setObject(teams.getNames(), teams.getTeamsLink())
                             .setActionStatus(Action.Builder.STATUS_TYPE_COMPLETED)
                             .build()
-            ).logFailures()
+            ).logFailures("shareTeams:addAction")
 
             TeamSharer(fragment, teams)
 

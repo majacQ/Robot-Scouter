@@ -1,26 +1,25 @@
 package com.supercilex.robotscouter.shared.scouting
 
-import android.arch.lifecycle.ViewModelProviders
 import android.os.Bundle
-import android.support.v7.widget.LinearLayoutManager
-import android.support.v7.widget.RecyclerView
 import android.view.View
+import androidx.annotation.LayoutRes
+import androidx.fragment.app.viewModels
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.firestore.CollectionReference
-import com.supercilex.robotscouter.core.LateinitVal
 import com.supercilex.robotscouter.core.ui.FragmentBase
+import com.supercilex.robotscouter.core.ui.LifecycleAwareLazy
 import com.supercilex.robotscouter.core.ui.SavedStateAdapter
-import com.supercilex.robotscouter.core.unsafeLazy
-import org.jetbrains.anko.support.v4.find
 
-abstract class MetricListFragment : FragmentBase() {
-    protected val holder: MetricListHolder by unsafeLazy {
-        ViewModelProviders.of(this).get(MetricListHolder::class.java)
-    }
+abstract class MetricListFragment(@LayoutRes contentLayoutId: Int) : FragmentBase(contentLayoutId) {
+    protected val holder by viewModels<MetricListHolder>()
     abstract val metricsRef: CollectionReference
     abstract val dataId: String
 
-    protected val metricsView by unsafeLazy { find<RecyclerView>(R.id.metricsView) }
-    protected var adapter: SavedStateAdapter<*, *> by LateinitVal()
+    protected val metricsView: RecyclerView by LifecycleAwareLazy {
+        requireView().findViewById(R.id.metricsView)
+    }
+    protected var adapter: SavedStateAdapter<*, *> by LifecycleAwareLazy()
         private set
 
     /**
@@ -55,7 +54,7 @@ abstract class MetricListFragment : FragmentBase() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putAll(tmpSavedAdapterState ?: run {
-            adapter.onSaveInstanceState(outState)
+            if (view != null) adapter.onSaveInstanceState(outState)
             tmpSavedAdapterState = outState
             outState
         })

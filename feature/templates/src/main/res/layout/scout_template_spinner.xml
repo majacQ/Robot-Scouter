@@ -7,7 +7,7 @@
 
     <include layout="@layout/scout_template_base_reorder" />
 
-    <android.support.text.emoji.widget.EmojiAppCompatEditText
+    <androidx.emoji.widget.EmojiAppCompatEditText
         android:id="@id/name"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -35,16 +35,16 @@
         app:iconStyle="@style/Icon.Accent"
         tools:ignore="UnusedAttribute" />
 
-    <android.support.constraint.Barrier
+    <androidx.constraintlayout.widget.Barrier
         android:id="@+id/barrier"
         android:layout_width="0dp"
         android:layout_height="0dp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toStartOf="parent"
         app:barrierDirection="bottom"
-        app:constraint_referenced_ids="name, new_item" />
+        app:constraint_referenced_ids="name, newItem" />
 
-    <android.support.v7.widget.RecyclerView
+    <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/items"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -57,6 +57,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/barrier"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layoutManager="LinearLayoutManager"
         tools:listitem="@layout/scout_template_spinner_item" />
 
 </com.supercilex.robotscouter.core.ui.views.CardMetricConstraintLayout>

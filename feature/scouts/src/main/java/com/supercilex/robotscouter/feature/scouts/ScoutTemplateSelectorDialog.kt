@@ -1,13 +1,12 @@
 package com.supercilex.robotscouter.feature.scouts
 
-import android.support.v4.app.FragmentManager
-import com.supercilex.robotscouter.core.ui.TemplateSelectionListener
-import com.supercilex.robotscouter.shared.AddScoutTemplateSelectorDialog
+import androidx.fragment.app.FragmentManager
+import com.supercilex.robotscouter.shared.TemplateSelectorDialog
 
-internal class ScoutTemplateSelectorDialog : AddScoutTemplateSelectorDialog() {
+internal class ScoutTemplateSelectorDialog : TemplateSelectorDialog() {
     override fun onItemSelected(id: String) {
         super.onItemSelected(id)
-        (parentFragment as TemplateSelectionListener).onTemplateSelected(id)
+        (requireParentFragment() as TemplateSelectionListener).onTemplateSelected(id)
     }
 
     companion object {

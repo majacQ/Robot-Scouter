@@ -2,8 +2,8 @@ package com.supercilex.robotscouter.core.ui.views
 
 import android.content.Context
 import android.graphics.Canvas
-import android.support.constraint.ConstraintLayout
 import android.util.AttributeSet
+import androidx.constraintlayout.widget.ConstraintLayout
 import com.supercilex.robotscouter.core.ui.CardMetric
 import com.supercilex.robotscouter.core.ui.CardMetricHelper
 
@@ -18,8 +18,8 @@ class CardMetricConstraintLayout : ConstraintLayout, CardMetric {
         helper.init()
     }
 
-    constructor(context: Context, attrs: AttributeSet, defStyleAttr: Int)
-            : super(context, attrs, defStyleAttr) {
+    constructor(context: Context, attrs: AttributeSet, defStyleAttr: Int) :
+            super(context, attrs, defStyleAttr) {
         helper.init()
     }
 

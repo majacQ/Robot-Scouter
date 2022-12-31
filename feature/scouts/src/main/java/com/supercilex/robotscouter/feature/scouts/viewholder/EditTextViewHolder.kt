@@ -2,14 +2,12 @@ package com.supercilex.robotscouter.feature.scouts.viewholder
 
 import android.annotation.SuppressLint
 import android.os.Build
-import android.support.annotation.RequiresApi
 import android.view.View
 import com.supercilex.robotscouter.core.data.model.update
 import com.supercilex.robotscouter.core.model.Metric
-import com.supercilex.robotscouter.core.unsafeLazy
+import com.supercilex.robotscouter.core.ui.hideKeyboard
 import com.supercilex.robotscouter.shared.scouting.MetricViewHolderBase
 import kotlinx.android.synthetic.main.scout_notes.*
-import java.util.Locale
 
 internal class EditTextViewHolder(
         itemView: View
@@ -31,8 +29,8 @@ internal class EditTextViewHolder(
         textLayout.isHintAnimationEnabled = true
 
         if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            metric.name.toUpperCase(Locale.ROOT).contains(nameHint)
+            Build.VERSION.SDK_INT >= 26 &&
+            metric.name.contains(View.AUTOFILL_HINT_NAME, true)
         ) {
             itemView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_AUTO
             name.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
@@ -41,11 +39,9 @@ internal class EditTextViewHolder(
     }
 
     override fun onFocusChange(v: View, hasFocus: Boolean) {
-        if (!hasFocus) metric.update(name.text.toString())
-    }
-
-    private companion object {
-        @get:RequiresApi(Build.VERSION_CODES.O)
-        val nameHint by unsafeLazy { View.AUTOFILL_HINT_NAME.toUpperCase() }
+        if (!hasFocus) {
+            metric.update(name.text.toString())
+            name.hideKeyboard()
+        }
     }
 }

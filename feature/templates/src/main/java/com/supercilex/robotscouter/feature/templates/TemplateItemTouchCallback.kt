@@ -1,37 +1,68 @@
 package com.supercilex.robotscouter.feature.templates
 
+  <<<<<<< snyk-upgrade-c51256f3d7c7d5c156a4e29578c16aa5
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.drawable.Drawable
+  =======
 import android.support.design.widget.AppBarLayout
 import android.support.v4.app.FragmentActivity
 import android.support.v7.widget.RecyclerView
 import android.support.v7.widget.helper.ItemTouchHelper
+  >>>>>>> item-selector-trashing
 import android.view.View
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.content.ContextCompat
 import androidx.core.view.postOnAnimationDelayed
+import androidx.fragment.app.FragmentActivity
+import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.RecyclerView
 import com.firebase.ui.common.ChangeEventType
 import com.firebase.ui.firestore.FirestoreRecyclerAdapter
+import com.google.android.material.appbar.AppBarLayout
 import com.google.firebase.firestore.WriteBatch
 import com.supercilex.robotscouter.common.FIRESTORE_POSITION
 import com.supercilex.robotscouter.core.LateinitVal
 import com.supercilex.robotscouter.core.data.firestoreBatch
-import com.supercilex.robotscouter.core.logFailures
+import com.supercilex.robotscouter.core.data.logFailures
 import com.supercilex.robotscouter.core.model.OrderedRemoteModel
 import com.supercilex.robotscouter.core.ui.isItemInRange
+import com.supercilex.robotscouter.core.ui.longSnackbar
 import com.supercilex.robotscouter.core.ui.maxAnimationDuration
 import com.supercilex.robotscouter.core.ui.showKeyboard
 import com.supercilex.robotscouter.core.ui.swap
 import com.supercilex.robotscouter.feature.templates.viewholder.TemplateViewHolder
-import org.jetbrains.anko.design.longSnackbar
-import org.jetbrains.anko.find
 import java.util.Collections
 import com.supercilex.robotscouter.R as RC
 
 internal class TemplateItemTouchCallback<T : OrderedRemoteModel>(
         private val rootView: View
+  <<<<<<< snyk-upgrade-c51256f3d7c7d5c156a4e29578c16aa5
+) : ItemTouchHelper.SimpleCallback(
+        ItemTouchHelper.UP or ItemTouchHelper.DOWN,
+        ItemTouchHelper.START
+) {
+    private val recyclerView: RecyclerView = rootView.findViewById(RC.id.metricsView)
+    private val appBar: AppBarLayout =
+            (rootView.context as FragmentActivity).findViewById(RC.id.appBar)
+    var adapter: FirestoreRecyclerAdapter<T, *> by LateinitVal()
+    var itemTouchHelper: ItemTouchHelper by LateinitVal()
+
+    private val deleteIcon: Drawable = checkNotNull(AppCompatResources.getDrawable(
+            rootView.context, R.drawable.ic_delete_black_24dp))
+    private val deletePaint = Paint().apply {
+        color = ContextCompat.getColor(rootView.context, RC.color.delete_background)
+    }
+    private val deleteIconPadding = rootView.resources.getDimensionPixelSize(RC.dimen.spacing_large)
+
+  =======
 ) : DeletingItemTouchCallback(ItemTouchHelper.UP or ItemTouchHelper.DOWN, rootView.context) {
     private val recyclerView: RecyclerView = rootView.find(RC.id.metricsView)
     private val appBar: AppBarLayout = (rootView.context as FragmentActivity).find(R.id.appBar)
     var adapter: FirestoreRecyclerAdapter<T, *> by LateinitVal()
     var itemTouchHelper: ItemTouchHelper by LateinitVal()
 
+  >>>>>>> item-selector-trashing
     private val localItems = mutableListOf<T>()
     private var animatorPointer: RecyclerView.ItemAnimator? = null
     private var scrollToPosition = RecyclerView.NO_POSITION
@@ -158,7 +189,7 @@ internal class TemplateItemTouchCallback<T : OrderedRemoteModel>(
 
             val path = adapter.snapshots[index].ref.path
             // Is this change event just an update to the deleted item?
-            if (localItems.find { it.ref.path == path } == null) return true
+            if (localItems.none { it.ref.path == path }) return true
         }
         return false
     }
@@ -167,9 +198,9 @@ internal class TemplateItemTouchCallback<T : OrderedRemoteModel>(
         val updatedModel = adapter.snapshots[index]
         val originalModelPosition = updatedModel.position
 
-        val hasOnlyPositionChanged = type == ChangeEventType.CHANGED && localItems.find {
+        val hasOnlyPositionChanged = type == ChangeEventType.CHANGED && localItems.any {
             it == updatedModel.apply { position = it.position }
-        } != null
+        }
         updatedModel.position = originalModelPosition
 
         return hasOnlyPositionChanged
@@ -183,7 +214,7 @@ internal class TemplateItemTouchCallback<T : OrderedRemoteModel>(
 
     private fun cleanupFailure() {
         cleanup()
-        longSnackbar(rootView, R.string.template_move_cancelled_rationale)
+        rootView.longSnackbar(R.string.template_move_cancelled_rationale)
         adapter.notifyDataSetChanged()
     }
 
@@ -221,15 +252,15 @@ internal class TemplateItemTouchCallback<T : OrderedRemoteModel>(
             firestoreBatch {
                 updatePositions(itemsBelow, -1)
                 delete(deletedRef)
-            }.logFailures(deletedRef, itemsBelow)
+            }.logFailures("onSwiped:deleteMetric", deletedRef, itemsBelow)
 
-            longSnackbar(rootView, RC.string.deleted, RC.string.undo) {
+            rootView.longSnackbar(RC.string.deleted, RC.string.undo) {
                 firestoreBatch {
                     set(deletedRef, checkNotNull(snapshot.data))
                     updatePositions(itemsBelow, 1)
-                }.logFailures(deletedRef, itemsBelow)
+                }.logFailures("onSwiped:addMetric", deletedRef, itemsBelow)
             }
-        }.logFailures(deletedRef)
+        }.logFailures("onSwiped:getMetric", deletedRef)
     }
 
     override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
@@ -239,7 +270,7 @@ internal class TemplateItemTouchCallback<T : OrderedRemoteModel>(
             recyclerView.post { recyclerView.itemAnimator = null }
             firestoreBatch {
                 updatePositions(localItems)
-            }.logFailures()
+            }.logFailures("clearView:updatePositions", localItems.map { it.ref })
         }
     }
 

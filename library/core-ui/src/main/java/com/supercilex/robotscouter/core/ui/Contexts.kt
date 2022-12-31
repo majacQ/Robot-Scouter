@@ -2,31 +2,24 @@ package com.supercilex.robotscouter.core.ui
 
 import android.content.Intent
 import android.graphics.Rect
-import android.os.Bundle
-import android.support.v4.app.Fragment
-import android.support.v7.app.AppCompatActivity
-import android.support.v7.preference.PreferenceFragmentCompat
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.animation.Animation
+import android.view.animation.Animation.AnimationListener
+import android.view.animation.AnimationUtils
 import android.widget.EditText
+import androidx.annotation.LayoutRes
+import androidx.appcompat.app.AppCompatActivity
+import androidx.fragment.app.Fragment
+import androidx.preference.PreferenceFragmentCompat
 import com.google.firebase.analytics.FirebaseAnalytics
-import com.supercilex.robotscouter.core.refWatcher
 
 interface OnActivityResult {
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?)
 }
 
-interface Saveable {
-    /**
-     * @see [android.support.v7.app.AppCompatActivity.onSaveInstanceState]
-     * @see [android.support.v4.app.Fragment.onSaveInstanceState]
-     */
-    fun onSaveInstanceState(outState: Bundle)
-}
-
-abstract class ActivityBase : AppCompatActivity(), OnActivityResult, Saveable,
-        KeyboardShortcutListener {
+abstract class ActivityBase : AppCompatActivity(), OnActivityResult, KeyboardShortcutListener {
     private val filteredEvents = mutableMapOf<Long, KeyEvent>()
     private var clearFocus: Runnable? = null
 
@@ -52,9 +45,6 @@ abstract class ActivityBase : AppCompatActivity(), OnActivityResult, Saveable,
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) =
             super.onActivityResult(requestCode, resultCode, data)
 
-    @Suppress("RedundantOverride") // Needed to relax visibility
-    override fun onSaveInstanceState(outState: Bundle) = super.onSaveInstanceState(outState)
-
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         val v: View? = currentFocus
         if (ev.action == MotionEvent.ACTION_DOWN && v is EditText) {
@@ -64,7 +54,7 @@ abstract class ActivityBase : AppCompatActivity(), OnActivityResult, Saveable,
                 clearFocus = Runnable {
                     if (currentFocus === v || currentFocus !is EditText) {
                         v.clearFocus()
-                        inputMethodManager.hideSoftInputFromWindow(v.windowToken, 0)
+                        v.hideKeyboard()
                     }
                     clearFocus = null
                 }.also {
@@ -81,28 +71,43 @@ abstract class ActivityBase : AppCompatActivity(), OnActivityResult, Saveable,
     }
 }
 
-abstract class FragmentBase : Fragment(), OnActivityResult, Saveable {
+abstract class FragmentBase(
+        @LayoutRes contentLayoutId: Int = 0
+) : Fragment(contentLayoutId), OnActivityResult {
     override fun onResume() {
         super.onResume()
+        val screenName = javaClass.simpleName
         FirebaseAnalytics.getInstance(requireContext())
-                .setCurrentScreen(requireActivity(), null, javaClass.simpleName)
+                .setCurrentScreen(requireActivity(), screenName, screenName)
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        refWatcher.watch(this)
+    override fun onCreateAnimation(transit: Int, enter: Boolean, nextAnim: Int): Animation? {
+        if (nextAnim == 0) return null
+        val animation = AnimationUtils.loadAnimation(activity, nextAnim)
+
+        val view = view
+        if (animation != null && view != null) {
+            val prevType = view.layerType
+            view.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            animation.setAnimationListener(object : AnimationListener {
+                override fun onAnimationEnd(animation: Animation) =
+                        view.setLayerType(prevType, null)
+
+                override fun onAnimationRepeat(animation: Animation?) = Unit
+
+                override fun onAnimationStart(animation: Animation?) = Unit
+            })
+        }
+
+        return animation
     }
 }
 
-abstract class PreferenceFragmentBase : PreferenceFragmentCompat(), OnActivityResult, Saveable {
+abstract class PreferenceFragmentBase : PreferenceFragmentCompat(), OnActivityResult {
     override fun onResume() {
         super.onResume()
+        val screenName = javaClass.simpleName
         FirebaseAnalytics.getInstance(requireContext())
-                .setCurrentScreen(requireActivity(), null, javaClass.simpleName)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        refWatcher.watch(this)
+                .setCurrentScreen(requireActivity(), screenName, screenName)
     }
 }

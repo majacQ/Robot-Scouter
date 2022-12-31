@@ -1,16 +1,14 @@
 package com.supercilex.robotscouter.core.ui
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.TypedArray
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.StateListDrawable
-import android.support.annotation.DrawableRes
-import android.support.v4.widget.TextViewCompat
-import android.support.v7.content.res.AppCompatResources
-import android.util.AttributeSet
 import android.view.ContextThemeWrapper
-import android.widget.TextView
-import androidx.core.content.withStyledAttributes
+import androidx.annotation.DrawableRes
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
 import com.supercilex.robotscouter.core.CrashLogger
 import com.supercilex.robotscouter.core.LateinitVal
 import org.xmlpull.v1.XmlPullParser
@@ -19,8 +17,10 @@ private const val SELECTOR_ATTR_NAME = "selector"
 private const val ITEM_ATTR_NAME = "item"
 private const val STATE_ATTR_NAME = "state"
 private const val DRAWABLE_ATTR_NAME = "drawable"
+private const val ANIMATED_DRAWABLE_ATTR_NAME = "animated-vector"
 
 fun Context.getDrawableCompat(@DrawableRes resId: Int): Drawable? {
+    @SuppressLint("ResourceType")
     val parser = resources.getXml(resId)
     try {
         var type = parser.next()
@@ -28,8 +28,15 @@ fun Context.getDrawableCompat(@DrawableRes resId: Int): Drawable? {
             type = parser.next()
         }
 
-        if (type != XmlPullParser.START_TAG || parser.name != SELECTOR_ATTR_NAME) {
-            return AppCompatResources.getDrawable(this, resId)
+        run {
+            val tagName = parser.name
+            if (type != XmlPullParser.START_TAG || tagName != SELECTOR_ATTR_NAME) {
+                return if (tagName == ANIMATED_DRAWABLE_ATTR_NAME) {
+                    AnimatedVectorDrawableCompat.create(this, resId)
+                } else {
+                    AppCompatResources.getDrawable(this, resId)
+                }
+            }
         }
 
         val states = StateListDrawable()
@@ -58,40 +65,6 @@ fun Context.getDrawableCompat(@DrawableRes resId: Int): Drawable? {
         return null
     } finally {
         parser.close()
-    }
-}
-
-internal fun TextView.initSupportVectorDrawablesAttrs(attrs: AttributeSet?) {
-    if (attrs == null) return
-
-    context.withStyledAttributes(attrs, R.styleable.SupportVectorDrawables) {
-        val compute: Int.() -> Drawable? = compute@{
-            if (this == -1) {
-                null
-            } else {
-                var result: Drawable? = null
-                context.withStyledAttributes(attrs, R.styleable.Icon) {
-                    result = getIconThemedContext(context).getDrawableCompat(this@compute)
-                }
-                result
-            }
-        }
-        val drawableStart = getResourceId(
-                R.styleable.SupportVectorDrawables_drawableStartCompat, -1).compute()
-        val drawableEnd = getResourceId(
-                R.styleable.SupportVectorDrawables_drawableEndCompat, -1).compute()
-        val drawableBottom = getResourceId(
-                R.styleable.SupportVectorDrawables_drawableBottomCompat, -1).compute()
-        val drawableTop = getResourceId(
-                R.styleable.SupportVectorDrawables_drawableTopCompat, -1).compute()
-
-        TextViewCompat.setCompoundDrawablesRelativeWithIntrinsicBounds(
-                this@initSupportVectorDrawablesAttrs,
-                drawableStart,
-                drawableTop,
-                drawableEnd,
-                drawableBottom
-        )
     }
 }
 

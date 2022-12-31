@@ -1,49 +1,26 @@
 package com.supercilex.robotscouter.feature.templates
 
 import android.os.Bundle
-import android.support.v4.app.FragmentManager
-import android.support.v7.app.AlertDialog
+import androidx.appcompat.app.AlertDialog
+import androidx.fragment.app.FragmentManager
 import com.google.firebase.firestore.DocumentReference
-import com.supercilex.robotscouter.common.FIRESTORE_TEMPLATE_ID
-import com.supercilex.robotscouter.core.data.defaultTemplateId
-import com.supercilex.robotscouter.core.data.firestoreBatch
 import com.supercilex.robotscouter.core.data.getRef
-import com.supercilex.robotscouter.core.data.model.ref
 import com.supercilex.robotscouter.core.data.model.trashTemplate
 import com.supercilex.robotscouter.core.data.putRef
-import com.supercilex.robotscouter.core.data.teams
-import com.supercilex.robotscouter.core.data.waitForChange
-import com.supercilex.robotscouter.core.logFailures
-import com.supercilex.robotscouter.core.model.TemplateType
 import com.supercilex.robotscouter.core.ui.ManualDismissDialog
 import com.supercilex.robotscouter.core.ui.show
-import kotlinx.coroutines.experimental.async
+import com.supercilex.robotscouter.R as RC
 
 internal class DeleteTemplateDialog : ManualDismissDialog() {
     override fun onCreateDialog(savedInstanceState: Bundle?) = AlertDialog.Builder(requireContext())
             .setTitle(R.string.template_delete_dialog_title)
             .setMessage(R.string.template_delete_message)
-            .setPositiveButton(R.string.template_delete_title, null)
+            .setPositiveButton(RC.string.delete, null)
             .setNegativeButton(android.R.string.cancel, null)
-            .createAndSetup(savedInstanceState)
+            .create()
 
     override fun onAttemptDismiss(): Boolean {
-        val deletedTemplateId = checkNotNull(arguments).getRef().id
-        val newTemplateId = defaultTemplateId
-        async {
-            val teamRefs = teams.waitForChange().filter {
-                deletedTemplateId == it.templateId
-            }.map { it.ref }
-            firestoreBatch {
-                for (ref in teamRefs) update(ref, FIRESTORE_TEMPLATE_ID, newTemplateId)
-            }.logFailures(teamRefs, newTemplateId)
-
-            if (deletedTemplateId == newTemplateId) {
-                defaultTemplateId = TemplateType.DEFAULT.id.toString()
-            }
-
-            trashTemplate(deletedTemplateId)
-        }.logFailures()
+        trashTemplate(requireArguments().getRef().id)
         return true
     }
 

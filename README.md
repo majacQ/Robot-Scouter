@@ -1,6 +1,6 @@
 <p align="center">
     <a href="https://play.google.com/store/apps/details?id=com.supercilex.robotscouter&utm_source=https://github.com/SUPERCILEX/Robot-Scouter/">
-        <img alt="Logo" src="https://supercilex.github.io/Robot-Scouter/assets/logo.svg" width="30%" />
+        <img alt="Logo" src="assets/logo.svg" width="30%" />
     </a>
 </p>
 
@@ -13,8 +13,8 @@
 </h4>
 
 <p align="center">
-    <a href="https://travis-ci.org/SUPERCILEX/Robot-Scouter">
-        <img src="https://img.shields.io/travis/SUPERCILEX/Robot-Scouter/master.svg?style=flat-square" />
+    <a href="https://github.com/SUPERCILEX/Robot-Scouter/actions">
+        <img src="https://github.com/SUPERCILEX/Robot-Scouter/workflows/CI/CD/badge.svg" />
     </a>
 </p>
 
@@ -24,65 +24,98 @@
     </a>
 </p>
 
-Robot Scouter is an open-source Android app with three core goals to make FIRST competition robot
-scouting easy, efficient, and collaborative.
+Robot Scouter is an open-source Android app with three core goals:
+to make FIRST competition robot scouting _easy_, _efficient_, and _collaborative_.
 
-<img src="docs/demo.gif" width="50%" height="50%" />
+<p align="center">
+    <a href="https://www.youtube.com/watch?v=0tYVCfPrdGY">
+        <img alt="Demo" src="assets/demo.gif" width="35%" height="35%" />
+    </a>
+</p>
+
+## Table of Contents
+
+- [Features](#features)
+  - [Highlights](#highlights-)
+  - [Scouting](#scouting-)
+  - [Templates](#templates-)
+  - [Exporting](#exporting-)
+- [Contributing](#contributing-)
+  - [Updating templates](#updating-templates-️)
+  - [Learning](#learning-)
+- [Environment setup](#environment-setup-)
+- [Psst...](#psst-)
 
 ## Features
 
-- **Full offline support** 📡
-- **No setup required i.e. no databases** 🗄️ (managing databases = 💩)
-- Easy sharing between users 🔗
-- Seamless collaboration: multiple people can scout the same team, different teams, or go solo on
-  Android N and use split screen mode to scout several teams at once.
-- **Customizable scouting templates** 📃 with several different metrics to choose from:
-  - header/title 🔖
-  - true/false (checkbox)
-  - stopwatch (for keeping track of cycle time) ⏱️
-  - number (counter)
-  - list (item selector)
-  - text (notes) 📜
-- **Integration with [The Blue Alliance](https://www.thebluealliance.com)** to automatically populate relevant team info
-- **Advanced spreadsheet exporting:**
-  - Averages are computed for each team automatically
-  - A global average sheet is included to compare teams against each other 📊
-  - Fancy formatting on devices with Android Lollipop (21) and above 🎀
-  - **Charts!** 📈
-  - PSA: Excel spreadsheets can easily be
-    [converted to Google Sheets](https://support.google.com/docs/answer/6055139).
-  - JSON exports are also supported for custom analysis (e.g. in Tableau)
-- And more!
+### Highlights ✨
+
+- Full offline support 📡
+- No setup required (i.e. no databases)
+- Customizable scouting templates
+- Advanced export capabilities
+- Integration with [The Blue Alliance](https://www.thebluealliance.com)
+
+### Scouting 📃
+
+- Simple yet powerful collaboration both within and between teams 🔗
+- Multiple people can scout the same team, different teams, or go solo on Android N and use split
+  screen mode to scout several teams at once 😎
+- Numerous metrics to choose from:
+  - Header (title) 🔖
+  - Checkbox (true/false) ✅
+  - Stopwatch (for keeping track of cycle time) ⏱️
+  - Counter (numerical) 🔢
+  - Item selector (list) 📝
+  - Notes (textual) 📜
+
+### Templates 📋
+
+- Fully customizable and independent from each year's game
+- Defaults are provided for the current year's game
+
+### Exporting 📊
+
+- Advanced spreadsheet exporting:
+  - Statistics and charts are automatically generated for each team
+  - A global average sheet is included to compare teams against each other
+  - Fancy formatting on devices with Android Lollipop (API 21) and above
+- PSA: Excel spreadsheets can easily be
+  [converted to Google Sheets](https://support.google.com/docs/answer/6055139)
+- JSON exports are also supported for custom analysis (e.g. in Tableau)
 
 ## Contributing 💗
 
 Want to add features, fix bugs, or just poke around the code? No problem! Just make sure to read
-the [contribution guidelines](.github/CONTRIBUTING.md) before getting in too deep.
+the [contribution guidelines](CONTRIBUTING.md) before getting in too deep.
 
 If you know another language, please help
 [translate Robot Scouter](https://www.transifex.com/supercilex/robot-scouter/)!
 
+### Updating templates ⬆️
+
+Anyone can do it! Simply follow
+[the instructions](https://github.com/SUPERCILEX/Robot-Scouter/blob/master/app/server/functions/src/main/kotlin/com/supercilex/robotscouter/server/functions/Templates.kt)
+throughout the file and send a pull request with your changes.
+
 ### Learning 📚
+
 - Get familiar with [Firebase](https://firebase.google.com) to understand the core technologies behind Robot Scouter
 - Take careful note of [Firestore](https://firebase.google.com/docs/firestore/) and
   [Firebase-UI](https://github.com/firebase/FirebaseUI-Android)
 
 ## Environment setup 💻
 
-1. [Move the dummy files](https://github.com/SUPERCILEX/Robot-Scouter/blob/564f1ba242447f4c77ddcc91b945f5d3a349b2a4/building/setup.sh#L3-L7)
-   into position
+1. Run `./gradlew setup`
 1. If you are working with Firestore or need access to other Firebase technologies,
-   [create your own Firebase project](https://firebase.google.com/docs/android/setup#manually_add_firebase)
-   and replace the dummy [google-services.json](travis-dummies/google-services.json) with the one
+   [create your own Firebase project](https://firebase.google.com/docs/android/setup)
+   and replace the dummy [google-services.json](ci-dummies/google-services.json) with the one
    created in your Firebase project
-1. Run `./gradlew check` to make sure the Travis build will pass
+1. Run `./gradlew presubmit` to make sure the CI build will pass
 1. That's it! 🚀
-
-**Note:** to improve build performance, pass in the `devBuild` flag to Gradle by searching for
-`Gradle-Android Compiler` in Intellij and adding `-PdevBuild` to the CLI options.
 
 ## Psst... 🤐
 
 If you want to get the latest build from master, you can join the
-[alpha testers community](https://plus.google.com/communities/111840458526472018249)
+[alpha testers group](https://groups.google.com/forum/#!forum/supercilex-alpha-testers)
 and the [beta](https://play.google.com/apps/testing/com.supercilex.robotscouter).

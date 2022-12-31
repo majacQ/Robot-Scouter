@@ -8,24 +8,18 @@ import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.analytics.FirebaseAnalytics.Param.CONTENT_TYPE
 import com.google.firebase.analytics.FirebaseAnalytics.Param.ITEM_ID
 import com.google.firebase.analytics.FirebaseAnalytics.Param.ITEM_NAME
+import com.google.firebase.analytics.FirebaseAnalytics.Param.SUCCESS
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
-import com.google.firebase.firestore.SetOptions
-import com.supercilex.robotscouter.common.FIRESTORE_LAST_LOGIN
 import com.supercilex.robotscouter.core.RobotScouter
-import com.supercilex.robotscouter.core.data.model.add
 import com.supercilex.robotscouter.core.data.model.getNames
-import com.supercilex.robotscouter.core.data.model.userRef
 import com.supercilex.robotscouter.core.isInTestMode
-import com.supercilex.robotscouter.core.logCrashLog
-import com.supercilex.robotscouter.core.logFailures
+import com.supercilex.robotscouter.core.logBreadcrumb
 import com.supercilex.robotscouter.core.model.Metric
 import com.supercilex.robotscouter.core.model.Team
 import com.supercilex.robotscouter.core.model.TemplateType
-import com.supercilex.robotscouter.core.model.User
-import kotlinx.coroutines.experimental.async
-import java.util.Date
-import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -44,18 +38,6 @@ private const val SEGMENT = "…"
 
 private val analytics: FirebaseAnalytics by lazy { FirebaseAnalytics.getInstance(RobotScouter) }
 
-private val updateLastLogin = object : Runnable {
-    override fun run() {
-        if (isSignedIn) {
-            val lastLogin = mapOf(FIRESTORE_LAST_LOGIN to Date())
-            userRef.set(lastLogin, SetOptions.merge()).logFailures(userRef, lastLogin)
-        }
-
-        mainHandler.removeCallbacks(this)
-        mainHandler.postDelayed(this, TimeUnit.DAYS.toMillis(1))
-    }
-}
-
 private val prefLogger = object : ChangeEventListenerBase {
     override fun onChildChanged(
             type: ChangeEventType,
@@ -66,8 +48,7 @@ private val prefLogger = object : ChangeEventListenerBase {
         if (type != ChangeEventType.ADDED && type != ChangeEventType.CHANGED) return
 
         val id = snapshot.id
-        val pref = prefs[newIndex]
-        when (pref) {
+        when (val pref = prefs[newIndex]) {
             is Boolean -> Crashlytics.setBool(id, pref)
             is String -> Crashlytics.setString(id, pref)
             is Int -> Crashlytics.setInt(id, pref)
@@ -86,26 +67,22 @@ fun initAnalytics() {
         val user = it.currentUser
 
         // Log uid to help debug db crashes
-        logCrashLog("User id: ${user?.uid}")
+        logBreadcrumb("User id: ${user?.uid}")
         Crashlytics.setUserIdentifier(user?.uid)
         Crashlytics.setUserEmail(user?.email)
         Crashlytics.setUserName(user?.displayName)
         analytics.setUserId(user?.uid)
         analytics.setUserProperty(FirebaseAnalytics.UserProperty.SIGN_UP_METHOD, user?.providerId)
-
-        if (user != null) {
-            User(
-                    user.uid,
-                    user.email.nullOrFull(),
-                    user.phoneNumber.nullOrFull(),
-                    user.displayName.nullOrFull(),
-                    user.photoUrl
-            ).add()
-
-            updateLastLogin.run()
-        }
     }
 }
+
+internal fun logNotificationsEnabled(
+        enabled: Boolean,
+        channels: Map<String, Boolean>
+) = analytics.logEvent(
+        "notifications_enabled_status",
+        bundleOf("enabled" to enabled, *channels.map { it.toPair() }.toTypedArray())
+)
 
 fun Team.logSelect() = analytics.logEvent(
         "select_team",
@@ -116,7 +93,7 @@ fun Team.logSelect() = analytics.logEvent(
         )
 )
 
-fun Team.logAdd() = analytics.logEvent(
+internal fun Team.logAdd() = analytics.logEvent(
         "add_team",
         bundleOf(
                 ITEM_ID to id,
@@ -144,28 +121,28 @@ fun Team.logTakeMedia() = analytics.logEvent(
 )
 
 fun List<Team>.logShare() {
-    async {
+    GlobalScope.launch {
         safeLog(this@logShare) { ids, name ->
             analytics.logEvent(
                     "share_teams",
                     bundleOf(ITEM_ID to ids, ITEM_NAME to name)
             )
         }
-    }.logFailures()
+    }
 }
 
 fun List<Team>.logExport() {
-    async {
+    GlobalScope.launch {
         safeLog(this@logExport) { ids, name ->
             analytics.logEvent(
                     "export_teams",
                     bundleOf(ITEM_ID to ids, ITEM_NAME to name)
             )
         }
-    }.logFailures()
+    }
 }
 
-fun Team.logAddScout(scoutId: String, templateId: String) = analytics.logEvent(
+internal fun Team.logAddScout(scoutId: String, templateId: String) = analytics.logEvent(
         "add_scout",
         bundleOf(
                 ITEM_ID to id,
@@ -187,7 +164,7 @@ fun Team.logSelectScout(scoutId: String, templateId: String) = analytics.logEven
         )
 )
 
-fun logAddTemplate(templateId: String, type: TemplateType) = analytics.logEvent(
+internal fun logAddTemplate(templateId: String, type: TemplateType) = analytics.logEvent(
         "add_template",
         bundleOf(ITEM_ID to templateId, CONTENT_TYPE to type.id)
 )
@@ -202,7 +179,7 @@ fun logShareTemplate(templateId: String, templateName: String) = analytics.logEv
         bundleOf(ITEM_ID to templateId, ITEM_NAME to templateName.toSafeString())
 )
 
-fun Metric<*>.logAdd() = analytics.logEvent(
+internal fun Metric<*>.logAdd() = analytics.logEvent(
         "add_metric",
         bundleOf(
                 ITEM_ID to ref.id,
@@ -211,7 +188,7 @@ fun Metric<*>.logAdd() = analytics.logEvent(
         )
 )
 
-fun Metric<*>.logUpdate() = analytics.logEvent(
+internal fun Metric<*>.logUpdate() = analytics.logEvent(
         "update_metric",
         bundleOf(
                 ITEM_ID to ref.id,
@@ -220,9 +197,14 @@ fun Metric<*>.logUpdate() = analytics.logEvent(
         )
 )
 
-fun logUpdateDefaultTemplateId(id: String) = analytics.logEvent(
+internal fun logUpdateDefaultTemplateId(id: String) = analytics.logEvent(
         "update_default_template_id",
         bundleOf(ITEM_ID to id)
+)
+
+fun logRatingDialogResponse(yes: Boolean) = analytics.logEvent(
+        "rating_response",
+        bundleOf(SUCCESS to yes)
 )
 
 fun logLoginEvent() = analytics.logEvent(FirebaseAnalytics.Event.LOGIN, Bundle.EMPTY)

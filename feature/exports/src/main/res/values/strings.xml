@@ -21,8 +21,8 @@
     <string name="export_progress_hint">Exporting…</string>
     <string name="export_complete_title">Export complete for %s</string>
     <plurals name="export_complete_subtitle">
-        <item quantity="one">1 file exported</item>
-        <item quantity="other">%d files exported</item>
+        <item quantity="one">1 template exported</item>
+        <item quantity="other">%d templates exported</item>
     </plurals>
     <plurals name="export_complete_summary">
         <item quantity="one">1 team exported</item>
@@ -35,11 +35,11 @@
     <string name="export_complete_none_message">No teams exported</string>
 
     <string name="export_initialize_status">Initializing</string>
-    <string name="export_load_status">Loading teams</string>
     <plurals name="export_load_status_detail">
         <item quantity="one">Loading team %d</item>
         <item quantity="other">Loading teams %d-%d</item>
     </plurals>
+    <string name="export_loaded_status">Teams loaded</string>
     <string name="export_template_status">Exporting teams for %s</string>
     <string name="export_average_status">Exporting overview sheet</string>
     <string name="export_cleanup_status">Cleanup</string>

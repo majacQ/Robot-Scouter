@@ -3,11 +3,11 @@ package com.supercilex.robotscouter.shared.client
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.support.v4.app.JobIntentService
+import androidx.core.app.JobIntentService
 import com.google.firebase.appindexing.FirebaseAppIndex
 import com.supercilex.robotscouter.core.CrashLogger
+import com.supercilex.robotscouter.core.InvocationMarker
 import com.supercilex.robotscouter.core.RobotScouter
-import com.supercilex.robotscouter.core.await
 import com.supercilex.robotscouter.core.data.getTemplateIndexable
 import com.supercilex.robotscouter.core.data.indexable
 import com.supercilex.robotscouter.core.data.model.getTemplateName
@@ -15,21 +15,22 @@ import com.supercilex.robotscouter.core.data.model.getTemplatesQuery
 import com.supercilex.robotscouter.core.data.model.scoutParser
 import com.supercilex.robotscouter.core.data.teams
 import com.supercilex.robotscouter.core.data.waitForChange
-import kotlinx.coroutines.experimental.async
-import kotlinx.coroutines.experimental.awaitAll
-import kotlinx.coroutines.experimental.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.tasks.await
 
 internal class AppIndexingService : JobIntentService() {
     override fun onHandleWork(intent: Intent) {
-        runBlocking {
-            try {
-                onSignedIn()
+        try {
+            runBlocking {
                 FirebaseAppIndex.getInstance().removeAll().await()
-
-                awaitAll(async { getUpdateTeamsTask() }, async { getUpdateTemplatesTask() })
-            } catch (e: Exception) {
-                CrashLogger.onFailure(e)
+                onSignedIn {
+                    awaitAll(async { getUpdateTeamsTask() }, async { getUpdateTemplatesTask() })
+                }
             }
+        } catch (e: Exception) {
+            CrashLogger.onFailure(InvocationMarker(e))
         }
     }
 

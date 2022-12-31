@@ -1,63 +1,60 @@
 package com.supercilex.robotscouter.feature.settings
 
 import android.app.Activity
-import android.arch.lifecycle.Observer
-import android.arch.lifecycle.ViewModelProviders
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
-import android.support.v4.graphics.drawable.DrawableCompat
-import android.support.v7.content.res.AppCompatResources
-import android.support.v7.preference.ListPreference
-import android.support.v7.preference.Preference
-import android.support.v7.preference.PreferenceGroup
-import android.support.v7.preference.PreferenceGroupAdapter
-import android.support.v7.preference.PreferenceScreen
-import android.support.v7.preference.PreferenceViewHolder
 import android.text.method.LinkMovementMethod
 import android.util.TypedValue
+import android.view.View
 import android.widget.TextView
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.content.getSystemService
+import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.net.toUri
+import androidx.fragment.app.viewModels
+import androidx.preference.Preference
+import androidx.preference.PreferenceGroup
+import androidx.preference.PreferenceGroupAdapter
+import androidx.preference.PreferenceScreen
+import androidx.preference.PreferenceViewHolder
+import androidx.preference.forEach
 import com.firebase.ui.auth.ErrorCodes
 import com.firebase.ui.auth.IdpResponse
 import com.google.firebase.auth.FirebaseAuth
-import com.supercilex.robotscouter.common.FIRESTORE_PREF_DEFAULT_TEMPLATE_ID
+import com.supercilex.robotscouter.core.data.asLiveData
 import com.supercilex.robotscouter.core.data.clearPrefs
 import com.supercilex.robotscouter.core.data.debugInfo
 import com.supercilex.robotscouter.core.data.isFullUser
 import com.supercilex.robotscouter.core.data.isSignedIn
 import com.supercilex.robotscouter.core.data.logLoginEvent
 import com.supercilex.robotscouter.core.data.prefStore
+import com.supercilex.robotscouter.core.data.prefs
 import com.supercilex.robotscouter.core.fullVersionName
+import com.supercilex.robotscouter.core.toast
 import com.supercilex.robotscouter.core.ui.PreferenceFragmentBase
-import com.supercilex.robotscouter.core.ui.TemplateSelectionListener
-import com.supercilex.robotscouter.core.unsafeLazy
 import com.supercilex.robotscouter.shared.client.RC_SIGN_IN
-import com.supercilex.robotscouter.shared.client.startSignIn
+import com.supercilex.robotscouter.shared.client.startLinkingSignIn
 import com.supercilex.robotscouter.shared.launchUrl
-import org.jetbrains.anko.support.v4.toast
 import com.supercilex.robotscouter.R as RC
 
 internal class SettingsFragment : PreferenceFragmentBase(),
-        TemplateSelectionListener,
         Preference.OnPreferenceChangeListener, Preference.OnPreferenceClickListener {
-    private val settingsModel by unsafeLazy {
-        ViewModelProviders.of(this).get(SettingsViewModel::class.java)
-    }
+    private val settingsModel by viewModels<SettingsViewModel>()
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         super.onActivityCreated(savedInstanceState)
-        settingsModel.init(null)
-        settingsModel.signOutListener.observe(this, Observer {
+        settingsModel.init()
+        settingsModel.signOutListener.observe(this) {
             if (it == null) {
                 FirebaseAuth.getInstance().signInAnonymously()
                 requireActivity().finish()
             } else {
                 toast(RC.string.error_unknown)
             }
-        })
+        }
     }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
@@ -66,62 +63,50 @@ internal class SettingsFragment : PreferenceFragmentBase(),
 
         preferenceManager.preferenceDataStore = prefStore
         addPreferencesFromResource(R.xml.app_preferences)
-        onPreferenceChange(preferenceScreen, null)
+
+        val screen = preferenceScreen
+        onPreferenceChange(screen, null)
+        prefs.asLiveData().observe(this) {
+            notifyChanged(screen)
+        }
     }
 
-    override fun onDisplayPreferenceDialog(preference: Preference) {
-        if (preference.key == FIRESTORE_PREF_DEFAULT_TEMPLATE_ID) {
-            SettingsTemplateSelectorDialog.show(childFragmentManager)
-        } else {
-            super.onDisplayPreferenceDialog(preference)
+    private fun notifyChanged(preference: Preference) {
+        if (preference is PreferenceGroup) {
+            preference.forEach { notifyChanged(it) }
+            return
         }
+
+        Preference::class.java.getDeclaredMethod("dispatchSetInitialValue").apply {
+            isAccessible = true
+        }.invoke(preference)
     }
 
     override fun onCreateAdapter(
             preferenceScreen: PreferenceScreen
-    ) = object : PreferenceGroupAdapter(preferenceScreen) {
-        override fun onBindViewHolder(holder: PreferenceViewHolder, position: Int) {
-            super.onBindViewHolder(holder, position)
-            if (getItem(position).key == "about") {
-                (holder.findViewById(R.id.about) as TextView).apply {
-                    text = getString(R.string.settings_pref_about_summary, "\uD83D\uDC96").trim()
-                    movementMethod = LinkMovementMethod.getInstance()
-                }
-            }
-        }
-    }
+    ) = InjectingAdapter(preferenceScreen)
 
     override fun onPreferenceChange(preference: Preference, newValue: Any?): Boolean {
         preference.onPreferenceChangeListener = this
         preference.onPreferenceClickListener = this
 
         when (preference) {
-            is PreferenceGroup -> for (i in 0 until preference.preferenceCount) {
-                onPreferenceChange(preference.getPreference(i), null)
-            }
-            is ListPreference -> {
-                if (preference.value == null) {
-                    preference.apply {
-                        isPersistent = false
-                        value = Preference::class.java.getDeclaredField("mDefaultValue")
-                                .apply { isAccessible = true }
-                                .get(preference)?.toString()
-                        isPersistent = true
-                    }
-                }
+            is PreferenceGroup -> preference.forEach {
+                onPreferenceChange(it, null)
             }
             else -> when (preference.key) {
                 KEY_LINK_ACCOUNT, KEY_SIGN_OUT -> preference.isVisible = isFullUser
+                KEY_ABOUT -> preference.title =
+                        resources.getText(R.string.settings_pref_about_summary).trim()
                 KEY_VERSION -> preference.summary = fullVersionName
             }
         }
 
         preference.icon?.let {
             val value = TypedValue()
-            if (!preference.context.theme
-                    .resolveAttribute(android.R.attr.textColorSecondary, value, true)) {
-                return@let
-            }
+            val resolved = preference.context.theme
+                    .resolveAttribute(android.R.attr.textColorSecondary, value, true)
+            if (!resolved) return@let
 
             DrawableCompat.setTint(it, AppCompatResources.getColorStateList(
                     preference.context, value.resourceId).defaultColor)
@@ -137,7 +122,7 @@ internal class SettingsFragment : PreferenceFragmentBase(),
                 clearPrefs()
                 activity.finish()
             }
-            KEY_LINK_ACCOUNT -> startSignIn()
+            KEY_LINK_ACCOUNT -> startLinkingSignIn()
             KEY_SIGN_OUT -> settingsModel.signOut()
             KEY_RELEASE_NOTES -> launchUrl(
                     activity,
@@ -148,29 +133,14 @@ internal class SettingsFragment : PreferenceFragmentBase(),
                     "https://www.transifex.com/supercilex/robot-scouter/".toUri()
             )
             KEY_VERSION -> {
-                (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).primaryClip =
-                        ClipData.newPlainText(
-                                getString(R.string.settings_debug_info_title), debugInfo)
+                checkNotNull(activity.getSystemService<ClipboardManager>())
+                        .setPrimaryClip(ClipData.newPlainText(
+                                getString(R.string.settings_debug_info_title), debugInfo))
                 toast(R.string.settings_debug_info_copied_message)
             }
-            KEY_LICENSES -> requireFragmentManager().beginTransaction()
-                    .setCustomAnimations(
-                            android.R.animator.fade_in,
-                            android.R.animator.fade_out,
-                            android.R.animator.fade_in,
-                            android.R.animator.fade_out
-                    )
-                    .replace(R.id.settings, LicensesFragment.newInstance())
-                    .addToBackStack(null)
-                    .commit()
             else -> return false
         }
         return true
-    }
-
-    override fun onTemplateSelected(id: String) {
-        (preferenceScreen.findPreference(FIRESTORE_PREF_DEFAULT_TEMPLATE_ID) as ListPreference)
-                .value = id
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -192,16 +162,31 @@ internal class SettingsFragment : PreferenceFragmentBase(),
         }
     }
 
+    class InjectingAdapter(
+            preferenceScreen: PreferenceScreen
+    ) : PreferenceGroupAdapter(preferenceScreen) {
+        override fun onBindViewHolder(holder: PreferenceViewHolder, position: Int) {
+            super.onBindViewHolder(holder, position)
+            if (getItem(position).key == KEY_ABOUT) {
+                holder.itemView.isClickable = false
+                (holder.findViewById(android.R.id.title) as TextView).apply {
+                    movementMethod = LinkMovementMethod.getInstance()
+                    if (Build.VERSION.SDK_INT >= 17) textDirection = View.TEXT_DIRECTION_LOCALE
+                }
+            }
+        }
+    }
+
     companion object {
         const val TAG = "SettingsFragment"
 
         private const val KEY_RESET_PREFS = "reset_prefs"
         private const val KEY_LINK_ACCOUNT = "link_account"
         private const val KEY_SIGN_OUT = "sign_out"
+        private const val KEY_ABOUT = "about"
         private const val KEY_RELEASE_NOTES = "release_notes"
         private const val KEY_TRANSLATE = "translate"
         private const val KEY_VERSION = "version"
-        private const val KEY_LICENSES = "licenses"
 
         fun newInstance() = SettingsFragment()
     }

@@ -3,8 +3,9 @@ package com.supercilex.robotscouter.feature.exports
 import android.graphics.Paint
 import android.os.Build.VERSION
 import android.os.Build.VERSION_CODES
-import com.supercilex.robotscouter.core.RobotScouter
 import com.supercilex.robotscouter.core.isLowRamDevice
+import com.supercilex.robotscouter.core.longToast
+import com.supercilex.robotscouter.core.mainHandler
 import com.supercilex.robotscouter.core.model.Metric
 import com.supercilex.robotscouter.core.model.Team
 import org.apache.poi.ss.usermodel.Cell
@@ -15,8 +16,6 @@ import org.apache.poi.ss.usermodel.Drawing
 import org.apache.poi.ss.usermodel.Sheet
 import org.apache.poi.ss.usermodel.Workbook
 import org.apache.poi.ss.util.WorkbookUtil
-import org.jetbrains.anko.longToast
-import org.jetbrains.anko.runOnUiThread
 import org.openxmlformats.schemas.drawingml.x2006.chart.CTTitle
 
 private const val MAX_SHEET_LENGTH = 31
@@ -41,14 +40,11 @@ internal fun getSafeSheetName(workbook: Workbook, team: Team): String {
     var originalName = WorkbookUtil.createSafeSheetName(team.toString())
     var safeName = originalName
     var i = 1
-    while (true) {
-        if (workbook.getSheet(safeName) == null) break
-        else {
-            safeName = "$originalName ($i)"
-            if (safeName.length > MAX_SHEET_LENGTH) {
-                originalName = team.number.toString()
-                safeName = originalName
-            }
+    while (workbook.getSheet(safeName) != null) {
+        safeName = "$originalName ($i)"
+        if (safeName.length > MAX_SHEET_LENGTH) {
+            originalName = team.number.toString()
+            safeName = originalName
         }
         i++
     }
@@ -74,7 +70,7 @@ internal fun autoFitColumnWidths(sheetIterator: Iterable<Sheet>) {
 }
 
 internal fun getMetricForChart(chart: Chart, pool: Map<Metric<*>, Chart>): Metric<*> =
-        checkNotNull(pool.keys.find { pool[it] === chart })
+        pool.keys.first { pool[it] === chart }
 
 internal fun CTTitle.setValue(text: String) {
     addNewLayout()
@@ -97,4 +93,4 @@ internal fun Drawing<*>.createChartAnchor(
 ): ClientAnchor =
         createAnchor(0, 0, 0, 0, startColumn, startRow, endColumn, startRow + endColumn / 2)
 
-internal fun showToast(message: String) = RobotScouter.runOnUiThread { longToast(message) }
+internal fun showToast(message: String) = mainHandler.post { longToast(message) }

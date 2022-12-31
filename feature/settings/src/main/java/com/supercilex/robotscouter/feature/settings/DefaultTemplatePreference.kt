@@ -1,11 +1,10 @@
 package com.supercilex.robotscouter.feature.settings
 
-import android.arch.lifecycle.ViewModelProviders
 import android.content.Context
-import android.content.ContextWrapper
-import android.support.v4.app.FragmentActivity
-import android.support.v7.preference.ListPreference
 import android.util.AttributeSet
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.ViewModelProvider
+import androidx.preference.ListPreference
 import com.google.firebase.auth.FirebaseAuth
 import com.supercilex.robotscouter.core.data.ChangeEventListenerBase
 import com.supercilex.robotscouter.core.data.defaultTemplateId
@@ -21,15 +20,19 @@ internal class DefaultTemplatePreference : ListPreference, ChangeEventListenerBa
         FirebaseAuth.AuthStateListener {
     private var holder: ScoutsHolder? = null
 
-    constructor(context: Context, attrs: AttributeSet, defStyleAttr: Int, defStyleRes: Int)
-            : super(context, attrs, defStyleAttr, defStyleRes)
+    constructor(context: Context, attrs: AttributeSet, defStyleAttr: Int, defStyleRes: Int) :
+            super(context, attrs, defStyleAttr, defStyleRes)
 
-    constructor(context: Context, attrs: AttributeSet, defStyleAttr: Int)
-            : super(context, attrs, defStyleAttr)
+    constructor(context: Context, attrs: AttributeSet, defStyleAttr: Int) :
+            super(context, attrs, defStyleAttr)
 
     constructor(context: Context, attrs: AttributeSet) : super(context, attrs)
 
     constructor(context: Context) : super(context)
+
+    init {
+        isEnabled = false
+    }
 
     override fun onAttached() {
         super.onAttached()
@@ -47,19 +50,23 @@ internal class DefaultTemplatePreference : ListPreference, ChangeEventListenerBa
 
         isPersistent = false
 
+        val defaultTemplateTypes = TemplateType.values.filterNot { it == TemplateType.EMPTY }
         entries = arrayOf(
-                *TemplateType.values.map {
+                *defaultTemplateTypes.map {
                     context.resources.getStringArray(RC.array.template_new_options)[it.id]
+                }.map {
+                    context.getString(R.string.settings_pref_default_template_name, it)
                 }.toTypedArray(),
                 *namesListener.mapIndexed { index, _ ->
                     namesListener[index].getTemplateName(index)
                 }.toTypedArray()
         )
         entryValues = arrayOf(
-                *TemplateType.values.map { it.id.toString() }.toTypedArray(),
+                *defaultTemplateTypes.map { it.id.toString() }.toTypedArray(),
                 *namesListener.map { it.id }.toTypedArray()
         )
         value = defaultTemplateId
+        isEnabled = true
         notifyChanged()
 
         isPersistent = true
@@ -71,10 +78,10 @@ internal class DefaultTemplatePreference : ListPreference, ChangeEventListenerBa
             onCleared()
         }
         holder = uid?.let {
-            ViewModelProviders
-                    .of((context as ContextWrapper).baseContext as FragmentActivity)
+            val activity = context as FragmentActivity
+            ViewModelProvider(activity)
                     // Ensure our instance is unique since we're mutating the listener
-                    .get(javaClass.canonicalName + it, ScoutsHolder::class.java)
+                    .get(javaClass.name + it, ScoutsHolder::class.java)
                     .apply { init { getTemplatesQuery() } }
         }
         holder?.scouts?.addChangeEventListener(this)

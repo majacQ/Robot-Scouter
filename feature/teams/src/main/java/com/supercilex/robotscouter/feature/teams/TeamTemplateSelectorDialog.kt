@@ -1,19 +1,19 @@
 package com.supercilex.robotscouter.feature.teams
 
-import android.support.v4.app.FragmentManager
+import androidx.fragment.app.FragmentManager
+import com.supercilex.robotscouter.TeamSelectionListener
 import com.supercilex.robotscouter.core.data.getScoutBundle
 import com.supercilex.robotscouter.core.data.getTeam
 import com.supercilex.robotscouter.core.data.toBundle
 import com.supercilex.robotscouter.core.model.Team
-import com.supercilex.robotscouter.core.ui.TeamSelectionListener
 import com.supercilex.robotscouter.core.ui.show
-import com.supercilex.robotscouter.shared.AddScoutTemplateSelectorDialog
+import com.supercilex.robotscouter.shared.TemplateSelectorDialog
 
-internal class TeamTemplateSelectorDialog : AddScoutTemplateSelectorDialog() {
+internal class TeamTemplateSelectorDialog : TemplateSelectorDialog() {
     override fun onItemSelected(id: String) {
         super.onItemSelected(id)
         (context as TeamSelectionListener)
-                .onTeamSelected(getScoutBundle(checkNotNull(arguments).getTeam(), true, id), false)
+                .onTeamSelected(getScoutBundle(requireArguments().getTeam(), true, id))
     }
 
     companion object {

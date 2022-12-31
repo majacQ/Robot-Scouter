@@ -10,7 +10,7 @@
         <item>On</item>
         <item>Off</item>
     </string-array>
-    <string-array name="settings_pref_night_mode_values">
+    <string-array name="settings_pref_night_mode_values" translatable="false">
         <item>auto</item>
         <item>yes</item>
         <item>no</item>
@@ -24,6 +24,7 @@
 
     <string name="settings_pref_default_template_title">Default template</string>
     <string name="settings_pref_default_template_summary">%s\nChoose the default template for new scouts</string>
+    <string name="settings_pref_default_template_name">[DEFAULT] %s</string>
 
     <string name="settings_pref_should_upload_to_tba_title">Upload media to The Blue Alliance</string>
     <string name="settings_pref_should_upload_to_tba_summary">
@@ -31,10 +32,10 @@
     </string>
     <string-array name="settings_pref_should_upload_to_tba_entries">
         <item>Ask every time</item>
-        <item>Yes</item>
-        <item>No</item>
+        <item>@string/yes</item>
+        <item>@string/no</item>
     </string-array>
-    <string-array name="settings_pref_should_upload_to_tba_values">
+    <string-array name="settings_pref_should_upload_to_tba_values" translatable="false">
         <item>ask</item>
         <item>yes</item>
         <item>no</item>
@@ -43,17 +44,22 @@
     <string name="settings_pref_reset_prefs_title">Reset preferences and tutorials</string>
 
     <string name="settings_pref_link_account_title">Link accounts</string>
-    <string name="settings_pref_link_account_summary">Merge two accounts into one</string>
+    <string name="settings_pref_link_account_summary">
+        Migrate this account\'s data into a new account and link them if possible.
+    </string>
 
     <string name="settings_pref_sign_out_title">Sign out</string>
 
     <string name="settings_pref_about_summary">
-        Robot Scouter is developed with %s by <a href="https://github.com/SUPERCILEX">Alex Saveau</a>
+        Robot Scouter is developed with 💖 by <a href="https://github.com/SUPERCILEX">Alex Saveau</a>
         and the icon was designed by <a href="https://github.com/andrewda">Andrew Dassonville</a>.\n\nIf
         you want to try out new features before everyone else, feel free to join
         <a href="https://play.google.com/apps/testing/com.supercilex.robotscouter">the beta</a>.\n\nAlso,
         Robot Scouter is <a href="https://github.com/SUPERCILEX/Robot-Scouter">open-source</a>
-        so please <a href="https://github.com/SUPERCILEX/Robot-Scouter/issues/new">file bugs and feature requests</a>!
+        so please <a href="https://github.com/SUPERCILEX/Robot-Scouter/issues/new">file bugs and feature requests</a>!\n\nSignificant
+        contributions:\n ● French translations provided by
+        <a href="https://twitter.com/samgd14">Sami G.-D.</a> from team
+        <a href="http://www.thebluealliance.com/team/6929">#6929</a>
     </string>
 
     <string name="settings_pref_release_notes_title">Release notes</string>

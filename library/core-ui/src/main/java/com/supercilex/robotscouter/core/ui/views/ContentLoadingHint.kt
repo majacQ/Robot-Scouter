@@ -2,74 +2,91 @@ package com.supercilex.robotscouter.core.ui.views
 
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
-import android.animation.ValueAnimator
+import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.drawable.Animatable
+import android.graphics.drawable.Animatable2
+import android.graphics.drawable.Drawable
 import android.util.AttributeSet
-import android.view.animation.LinearInterpolator
-import androidx.core.animation.doOnEnd
+import androidx.appcompat.widget.AppCompatTextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.postDelayed
+import androidx.core.widget.TextViewCompat
+import androidx.vectordrawable.graphics.drawable.Animatable2Compat
 import com.supercilex.robotscouter.core.ui.ContentLoader
 import com.supercilex.robotscouter.core.ui.ContentLoaderHelper
 import com.supercilex.robotscouter.core.ui.animatePopReveal
+import com.supercilex.robotscouter.core.ui.mediumAnimationDuration
+import com.supercilex.robotscouter.core.unsafeLazy
 
-class ContentLoadingHint : SupportVectorDrawablesTextView, ContentLoader,
-        ValueAnimator.AnimatorUpdateListener {
-    override val helper = ContentLoaderHelper(this, ::reveal, ::dismiss)
+class ContentLoadingHint : AppCompatTextView, ContentLoader {
+    override val helper = ContentLoaderHelper(this, ::toggle)
 
-    private var animator: ValueAnimator? = null
+    private val animatable by unsafeLazy {
+        TextViewCompat.getCompoundDrawablesRelative(this)
+                .filterNotNull()
+                .single() as Animatable
+    }
 
     constructor(context: Context) : super(context)
 
     constructor(context: Context, attrs: AttributeSet) : super(context, attrs)
 
-    constructor(context: Context, attrs: AttributeSet, defStyleAttr: Int)
-            : super(context, attrs, defStyleAttr)
+    constructor(context: Context, attrs: AttributeSet, defStyleAttr: Int) :
+            super(context, attrs, defStyleAttr)
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         helper.onAttachedToWindow()
+
+        animatable.registerOnEndCallback {
+            postDelayed(mediumAnimationDuration) {
+                if (ViewCompat.isAttachedToWindow(this@ContentLoadingHint)) animatable.start()
+            }
+        }
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         helper.onDetachedFromWindow()
-        animator?.cancel()
-        animator = null
+
+        animatable.clearAnimationCallbacks()
+        animatable.stop()
     }
 
-    private fun reveal() {
-        animatePopReveal(true, object : AnimatorListenerAdapter() {
+    private fun toggle(visible: Boolean) {
+        animatePopReveal(visible, object : AnimatorListenerAdapter() {
             override fun onAnimationEnd(animation: Animator) {
-                startIdleAnimation()
+                if (visible) animatable.start() else animatable.stop()
             }
         })
     }
 
-    private fun dismiss() {
-        animator?.apply {
-            end()
-            doOnEnd { animatePopReveal(false) }
-        }
-        animator = null
-    }
-
-    private fun startIdleAnimation() {
-        animator = ValueAnimator.ofFloat(1f, 1.15f, 0.85f, 1f).apply {
-            interpolator = LinearInterpolator()
-            duration = DURATION
-            repeatCount = ValueAnimator.INFINITE
-            addUpdateListener(this@ContentLoadingHint)
-            start()
-        }
-    }
-
-    override fun onAnimationUpdate(animation: ValueAnimator) {
-        (animation.animatedValue as Float).let {
-            scaleY = it
-            scaleX = it
+    @SuppressLint("NewApi")
+    private inline fun Animatable.registerOnEndCallback(crossinline onEnd: () -> Unit) {
+        if (this is Animatable2Compat) {
+            registerAnimationCallback(object : Animatable2Compat.AnimationCallback() {
+                override fun onAnimationEnd(drawable: Drawable?) {
+                    onEnd()
+                }
+            })
+        } else {
+            this as Animatable2
+            registerAnimationCallback(object : Animatable2.AnimationCallback() {
+                override fun onAnimationEnd(drawable: Drawable?) {
+                    onEnd()
+                }
+            })
         }
     }
 
-    private companion object {
-        const val DURATION = 2500L
+    @SuppressLint("NewApi")
+    private fun Animatable.clearAnimationCallbacks() {
+        if (this is Animatable2Compat) {
+            clearAnimationCallbacks()
+        } else {
+            this as Animatable2
+            clearAnimationCallbacks()
+        }
     }
 }

@@ -1,61 +1,22 @@
 package com.supercilex.robotscouter.core.data
 
-import android.Manifest
-import android.os.Build
-import android.os.Environment
-import android.support.annotation.RequiresPermission
-import android.support.annotation.WorkerThread
+import android.webkit.MimeTypeMap
 import java.io.File
 
-const val MIME_TYPE_ANY = "*/*"
-
-val ioPerms = listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-
-private val exports = Environment.getExternalStoragePublicDirectory(
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            Environment.DIRECTORY_DOCUMENTS
-        } else {
-            "Documents"
-        }
-)
-private val media: File =
-        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-
-@WorkerThread
-fun initIo() {
-    // Do nothing, this will initialize our static fields
+/** @return this directory after ensuring that it either already exists or was created */
+fun File.safeMkdirs(): File = apply {
+    val create = { exists() || mkdirs() }
+    check(create() || create()) { "Unable to create $this" }
 }
 
-@get:WorkerThread
-@get:RequiresPermission(value = Manifest.permission.WRITE_EXTERNAL_STORAGE)
-val exportsFolder: File?
-    get() = getFolder(exports)
+/** @return this file after ensuring that it either already exists or was created */
+fun File.safeCreateNewFile(): File = apply {
+    parentFile?.safeMkdirs()
 
-@get:WorkerThread
-@get:RequiresPermission(value = Manifest.permission.WRITE_EXTERNAL_STORAGE)
-val mediaFolder: File?
-    get() = getFolder(media)
-
-@WorkerThread
-fun File.hidden() = File(parentFile, ".$name")
-
-@WorkerThread
-fun File.unhidden() = File(parentFile, name.substring(1))
-
-@WorkerThread
-fun File.hide(): File? {
-    val hidden = hidden()
-    return if (!renameTo(hidden)) null else hidden
+    val create = { exists() || createNewFile() }
+    check(create() || create()) { "Unable to create $this" }
 }
 
-@WorkerThread
-fun File.unhide(): File? {
-    val unhidden = unhidden()
-    return if (!renameTo(unhidden)) null else unhidden
+fun File.mimeType(): String {
+    return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "*/*"
 }
-
-private fun getFolder(folder: File) =
-        if (isExternalStorageMounted() && (folder.exists() || folder.mkdirs())) folder else null
-
-private fun isExternalStorageMounted(): Boolean =
-        Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED

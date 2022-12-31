@@ -1,24 +1,21 @@
 package com.supercilex.robotscouter.shared
 
 import android.app.Dialog
-import android.arch.lifecycle.ViewModelProviders
 import android.graphics.Canvas
 import android.graphics.Rect
-import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
-import android.support.annotation.StringRes
-import android.support.v4.widget.TextViewCompat
-import android.support.v7.app.AlertDialog
-import android.support.v7.content.res.AppCompatResources
-import android.support.v7.widget.DividerItemDecoration
-import android.support.v7.widget.LinearLayoutManager
-import android.support.v7.widget.RecyclerView
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.annotation.CallSuper
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.widget.TextViewCompat
+import androidx.fragment.app.viewModels
+import androidx.recyclerview.widget.DividerItemDecoration
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.firebase.ui.common.ChangeEventType
 import com.firebase.ui.firestore.FirestoreRecyclerAdapter
 import com.firebase.ui.firestore.FirestoreRecyclerOptions
@@ -29,18 +26,13 @@ import com.supercilex.robotscouter.core.data.model.getTemplateName
 import com.supercilex.robotscouter.core.data.model.getTemplatesQuery
 import com.supercilex.robotscouter.core.model.Scout
 import com.supercilex.robotscouter.core.model.TemplateType
-import com.supercilex.robotscouter.core.ui.DialogFragmentBase
-import com.supercilex.robotscouter.core.ui.create
+import com.supercilex.robotscouter.core.ui.BottomSheetDialogFragmentBase
 import com.supercilex.robotscouter.core.unsafeLazy
 import kotlinx.android.synthetic.main.dialog_template_selector.*
 import kotlin.math.roundToInt
 
-abstract class TemplateSelectorDialog : DialogFragmentBase() {
-    @get:StringRes protected abstract val title: Int
-
-    private val holder: ScoutsHolder by unsafeLazy {
-        ViewModelProviders.of(this).get(ScoutsHolder::class.java)
-    }
+abstract class TemplateSelectorDialog : BottomSheetDialogFragmentBase() {
+    private val holder by viewModels<ScoutsHolder>()
 
     override val containerView: View by unsafeLazy {
         View.inflate(context, R.layout.dialog_template_selector, null)
@@ -91,27 +83,14 @@ abstract class TemplateSelectorDialog : DialogFragmentBase() {
         holder.init { getTemplatesQuery() }
     }
 
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        return AlertDialog.Builder(requireContext())
-                .setTitle(title)
-                .setView(view)
-                .setNegativeButton(android.R.string.cancel, null)
-                .create { onViewCreated(containerView, savedInstanceState) }
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+    override fun onDialogCreated(dialog: Dialog, savedInstanceState: Bundle?) {
         progress.show()
 
-        templatesView.layoutManager = LinearLayoutManager(context)
         templatesView.adapter = adapter
         templatesView.addItemDecoration(object : DividerItemDecoration(
                 context,
                 DividerItemDecoration.VERTICAL
         ) {
-            private val divider = DividerItemDecoration::class.java
-                    .getDeclaredField("mDivider")
-                    .apply { isAccessible = true }
-                    .get(this) as Drawable
             private val bounds = Rect()
 
             override fun onDraw(c: Canvas, parent: RecyclerView, state: RecyclerView.State) {
@@ -121,7 +100,7 @@ abstract class TemplateSelectorDialog : DialogFragmentBase() {
 
                 val left: Int
                 val right: Int
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && parent.clipToPadding) {
+                if (Build.VERSION.SDK_INT >= 21 && parent.clipToPadding) {
                     left = parent.paddingLeft
                     right = parent.width - parent.paddingRight
                     c.clipRect(left, parent.paddingTop, right, parent.height - parent.paddingBottom)
@@ -131,9 +110,11 @@ abstract class TemplateSelectorDialog : DialogFragmentBase() {
                 }
 
                 // Only draw the divider for the second item i.e. the last native template
-                val child = parent.getChildAt(1 - (templatesView.layoutManager as LinearLayoutManager)
-                        .findFirstVisibleItemPosition()) ?: return
+                val child =
+                        parent.getChildAt(1 - (templatesView.layoutManager as LinearLayoutManager)
+                                .findFirstVisibleItemPosition()) ?: return
                 parent.getDecoratedBoundsWithMargins(child, bounds)
+                val divider = checkNotNull(drawable)
                 val bottom = bounds.bottom + child.translationY.roundToInt()
                 val top = bottom - divider.intrinsicHeight
                 divider.setBounds(left, top, right, bottom)
@@ -144,12 +125,20 @@ abstract class TemplateSelectorDialog : DialogFragmentBase() {
         })
     }
 
-    protected abstract fun onItemSelected(id: String)
+    @CallSuper
+    protected open fun onItemSelected(id: String) {
+        if (setAsDefault.isChecked) defaultTemplateId = id
+    }
 
     private class ItemViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView),
             View.OnClickListener {
         private lateinit var listener: TemplateSelectorDialog
         private lateinit var id: String
+
+        init {
+            itemView as TextView
+            if (Build.VERSION.SDK_INT >= 17) itemView.textDirection = View.TEXT_DIRECTION_LOCALE
+        }
 
         fun bind(listener: TemplateSelectorDialog, scout: Scout, id: String) {
             this.listener = listener
@@ -159,21 +148,15 @@ abstract class TemplateSelectorDialog : DialogFragmentBase() {
             itemView.text = scout.getTemplateName(adapterPosition - EXTRA_ITEMS)
             itemView.setOnClickListener(this)
             if (id == defaultTemplateId) {
-                itemView.compoundDrawablePadding = TypedValue.applyDimension(
-                        TypedValue.COMPLEX_UNIT_DIP,
-                        itemView.resources.getDimension(R.dimen.spacing_mini),
-                        itemView.resources.displayMetrics
-                ).toInt()
                 TextViewCompat.setCompoundDrawablesRelativeWithIntrinsicBounds(
                         itemView,
+                        null,
+                        null,
                         AppCompatResources.getDrawable(
                                 itemView.context, R.drawable.ic_star_accent_24dp),
-                        null,
-                        null,
                         null
                 )
             } else {
-                itemView.compoundDrawablePadding = 0
                 TextViewCompat.setCompoundDrawablesRelativeWithIntrinsicBounds(
                         itemView, null, null, null, null)
             }

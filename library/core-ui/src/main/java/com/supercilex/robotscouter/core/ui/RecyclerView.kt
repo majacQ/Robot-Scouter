@@ -2,11 +2,11 @@ package com.supercilex.robotscouter.core.ui
 
 import android.os.Bundle
 import android.os.Parcelable
-import android.support.v7.widget.DefaultItemAnimator
-import android.support.v7.widget.LinearLayoutManager
-import android.support.v7.widget.RecyclerView
-import android.support.v7.widget.SimpleItemAnimator
 import androidx.core.view.postOnAnimationDelayed
+import androidx.recyclerview.widget.DefaultItemAnimator
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.SimpleItemAnimator
 import com.firebase.ui.firestore.FirestoreRecyclerAdapter
 import com.firebase.ui.firestore.FirestoreRecyclerOptions
 import kotlin.math.max
@@ -15,23 +15,26 @@ private val defaultMaxAnimationDuration: Long by lazy {
     DefaultItemAnimator().maxAnimationDuration()
 }
 
-fun RecyclerView.isItemInRange(position: Int) = (layoutManager as LinearLayoutManager).let {
-    val first = it.findFirstCompletelyVisibleItemPosition()
+fun RecyclerView.isItemInRange(position: Int): Boolean {
+    val manager = layoutManager as LinearLayoutManager
+    val adapter = checkNotNull(adapter)
+    val first = manager.findFirstCompletelyVisibleItemPosition()
 
     // Only compute findLastCompletelyVisibleItemPosition if necessary
-    position in first..(adapter.itemCount - 1) &&
-            position in first..it.findLastCompletelyVisibleItemPosition()
+    return position in first until adapter.itemCount &&
+            position in first..manager.findLastCompletelyVisibleItemPosition()
 }
 
 inline fun RecyclerView.notifyItemsNoChangeAnimation(
+        payload: Any? = null,
         update: RecyclerView.Adapter<*>.() -> Unit = {
-            notifyItemRangeChanged(0, adapter.itemCount)
+            notifyItemRangeChanged(0, itemCount, payload)
         }
 ) {
     val animator = itemAnimator as? SimpleItemAnimator
 
     animator?.supportsChangeAnimations = false
-    adapter.update()
+    checkNotNull(adapter).update()
 
     postOnAnimationDelayed(animator.maxAnimationDuration()) {
         animator?.supportsChangeAnimations = true
@@ -71,15 +74,15 @@ abstract class SavedStateAdapter<T, VH : RecyclerView.ViewHolder>(
         options: FirestoreRecyclerOptions<T>,
         savedInstanceState: Bundle?,
         protected val recyclerView: RecyclerView
-) : FirestoreRecyclerAdapter<T, VH>(options), Saveable {
+) : FirestoreRecyclerAdapter<T, VH>(options) {
     private var state: Parcelable?
-    private val RecyclerView.state get() = layoutManager.onSaveInstanceState()
+    private val RecyclerView.state get() = layoutManager?.onSaveInstanceState()
 
     init {
         state = savedInstanceState?.getParcelable(SAVED_STATE_KEY)
     }
 
-    override fun onSaveInstanceState(outState: Bundle) {
+    fun onSaveInstanceState(outState: Bundle) {
         outState.putParcelable(SAVED_STATE_KEY, recyclerView.state)
     }
 
@@ -89,7 +92,7 @@ abstract class SavedStateAdapter<T, VH : RecyclerView.ViewHolder>(
     }
 
     override fun onDataChanged() {
-        recyclerView.layoutManager.onRestoreInstanceState(state)
+        recyclerView.layoutManager?.onRestoreInstanceState(state)
         state = null
     }
 

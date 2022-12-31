@@ -2,9 +2,10 @@ package com.supercilex.robotscouter.core.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.support.v7.app.AppCompatDelegate
-import android.support.v7.preference.PreferenceDataStore
+import android.os.Build
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.edit
+import androidx.preference.PreferenceDataStore
 import com.firebase.ui.common.ChangeEventType
 import com.firebase.ui.firestore.ObservableSnapshotArray
 import com.firebase.ui.firestore.SnapshotParser
@@ -18,16 +19,17 @@ import com.supercilex.robotscouter.common.FIRESTORE_PREF_NIGHT_MODE
 import com.supercilex.robotscouter.common.FIRESTORE_PREF_SHOULD_SHOW_RATING_DIALOG
 import com.supercilex.robotscouter.common.FIRESTORE_PREF_UPLOAD_MEDIA_TO_TBA
 import com.supercilex.robotscouter.common.FIRESTORE_VALUE
+import com.supercilex.robotscouter.core.InvocationMarker
 import com.supercilex.robotscouter.core.RobotScouter
 import com.supercilex.robotscouter.core.data.model.updateTemplateId
 import com.supercilex.robotscouter.core.data.model.userPrefs
-import com.supercilex.robotscouter.core.logFailures
+import com.supercilex.robotscouter.core.logBreadcrumb
 import com.supercilex.robotscouter.core.model.TemplateType
-import kotlinx.coroutines.experimental.async
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
-val prefParser = SnapshotParser<Any?> {
-    val id = it.id
-    when (id) {
+internal val prefParser = SnapshotParser<Any?> {
+    when (it.id) {
         FIRESTORE_PREF_LOCK_TEMPLATES,
         FIRESTORE_PREF_HAS_SHOWN_ADD_TEAM_TUTORIAL,
         FIRESTORE_PREF_HAS_SHOWN_SIGN_IN_TUTORIAL,
@@ -45,18 +47,20 @@ val prefParser = SnapshotParser<Any?> {
 
 val prefStore = object : PreferenceDataStore() {
     override fun putString(key: String, value: String?) {
-        if (value != null) {
-            val ref = userPrefs.document(key)
-            ref.set(mapOf(FIRESTORE_VALUE to value)).logFailures(ref, value)
-        }
+        if (value == null || !isSignedIn) return
+
+        val ref = userPrefs.document(key)
+        ref.set(mapOf(FIRESTORE_VALUE to value)).logFailures("prefStore:putS", ref, value)
     }
 
     override fun getString(key: String, defValue: String?): String? =
             localPrefs.getString(key, defValue)
 
     override fun putBoolean(key: String, value: Boolean) {
+        if (!isSignedIn) return
+
         val ref = userPrefs.document(key)
-        ref.set(mapOf(FIRESTORE_VALUE to value)).logFailures(ref, value)
+        ref.set(mapOf(FIRESTORE_VALUE to value)).logFailures("prefStore:putB", ref, value)
     }
 
     override fun getBoolean(key: String, defValue: Boolean): Boolean =
@@ -75,14 +79,15 @@ var defaultTemplateId: String
 
 @get:AppCompatDelegate.NightMode
 val nightMode: Int
-    get() {
-        val mode = prefStore.getString(FIRESTORE_PREF_NIGHT_MODE, "auto")
-        return when (mode) {
-            "auto" -> AppCompatDelegate.MODE_NIGHT_AUTO
-            "yes" -> AppCompatDelegate.MODE_NIGHT_YES
-            "no" -> AppCompatDelegate.MODE_NIGHT_NO
-            else -> error("Unknown night mode value: $mode")
+    get() = when (val mode = prefStore.getString(FIRESTORE_PREF_NIGHT_MODE, "auto")) {
+        "auto" -> if (Build.VERSION.SDK_INT >= 29) {
+            AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        } else {
+            AppCompatDelegate.MODE_NIGHT_AUTO_BATTERY
         }
+        "yes" -> AppCompatDelegate.MODE_NIGHT_YES
+        "no" -> AppCompatDelegate.MODE_NIGHT_NO
+        else -> error("Unknown night mode value: $mode")
     }
 
 val isTemplateEditingAllowed get() = !prefStore.getBoolean(FIRESTORE_PREF_LOCK_TEMPLATES, false)
@@ -165,18 +170,25 @@ fun <T> ObservableSnapshotArray<*>.getPrefOrDefault(id: String, defValue: T): T 
 }
 
 fun clearPrefs() {
-    async {
-        for (pref in userPrefs.getInBatches()) {
-            val ref = pref.reference
-            ref.delete().logFailures(ref, pref.data)
+    GlobalScope.launch {
+        val prefs = try {
+            userPrefs.getInBatches()
+        } catch (e: Exception) {
+            logBreadcrumb("clearPrefs: " + userPrefs.path)
+            throw InvocationMarker(e)
         }
 
-        localPrefs.edit(true) { clear() }
-    }.logFailures()
+        for (pref in prefs) {
+            val ref = pref.reference
+            ref.delete().logFailures("clearPrefs", pref)
+        }
+
+        localPrefs.edit { clear() }
+    }
 }
 
 private fun updateTeamTemplateIds() {
-    async {
+    GlobalScope.launch {
         for (team in teams.waitForChange()) team.updateTemplateId(defaultTemplateId)
-    }.logFailures()
+    }
 }

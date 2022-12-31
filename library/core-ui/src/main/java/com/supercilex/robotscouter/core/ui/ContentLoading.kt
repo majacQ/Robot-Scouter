@@ -21,15 +21,12 @@ internal interface ContentLoader {
     fun hide(force: Boolean = false, callback: Runnable? = null) = helper.hide(force, callback)
 }
 
-class ContentLoaderHelper(private val view: View, show: () -> Unit, hide: () -> Unit) {
+class ContentLoaderHelper(private val view: View, toggle: (visible: Boolean) -> Unit) {
     private val delayedShow = Runnable {
         startTime = SystemClock.uptimeMillis()
-        show()
+        toggle(true)
     }
-    private val delayedHide = Runnable {
-        view.isVisible = false
-        hide()
-    }
+    private val delayedHide = Runnable { toggle(false) }
 
     private var isAttachedToWindow = false
     private var isShown: Boolean = view.isVisible
@@ -72,7 +69,7 @@ class ContentLoaderHelper(private val view: View, show: () -> Unit, hide: () -> 
             if (startTime == -1L || diff >= MIN_SHOW_TIME_MILLIS || force) {
                 // The progress spinner has been shown long enough OR was not shown yet.
                 // If it wasn't shown yet, it will just never be shown.
-                view.isVisible = false
+                delayedHide.run()
                 callback?.run()
                 startTime = -1L
             } else {

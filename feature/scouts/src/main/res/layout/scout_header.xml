@@ -5,11 +5,12 @@
     style="@style/RobotScouter.ListItem">
 
     <!-- Set any style to get rid of the AppCompat one which changes the text color and whatnot. -->
-    <android.support.text.emoji.widget.EmojiAppCompatTextView
+    <androidx.emoji.widget.EmojiAppCompatTextView
         android:id="@id/name"
         style="@style/RobotScouter"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:textDirection="locale"
         android:textIsSelectable="false"
         android:textSize="18sp"
         android:textStyle="bold"

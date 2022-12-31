@@ -5,20 +5,21 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationChannelGroup
 import android.app.NotificationManager
-import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.support.annotation.RequiresApi
+import androidx.annotation.RequiresApi
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.getSystemService
 import com.supercilex.robotscouter.core.LateinitVal
 import com.supercilex.robotscouter.core.RobotScouter
-import com.supercilex.robotscouter.core.reportOrCancel
-import org.jetbrains.anko.intentFor
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.util.LinkedList
 import java.util.Queue
-import java.util.concurrent.Future
-import java.util.concurrent.ScheduledThreadPoolExecutor
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -33,12 +34,20 @@ const val EXPORT_IN_PROGRESS_CHANNEL = "export_in_progress"
  */
 const val SAFE_NOTIFICATION_RATE_LIMIT_IN_MILLIS = 200L
 
-val notificationManager: NotificationManager by lazy {
-    RobotScouter.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+val notificationManager by lazy { NotificationManagerCompat.from(RobotScouter) }
+private val systemNotificationManager by lazy {
+    checkNotNull(RobotScouter.getSystemService<NotificationManager>())
 }
 
 fun initNotifications() {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    logNotificationsEnabled(
+            notificationManager.areNotificationsEnabled(),
+            notificationManager.notificationChannels.associate {
+                it.id to (it.importance != NotificationManagerCompat.IMPORTANCE_NONE)
+            }
+    )
+
+    if (Build.VERSION.SDK_INT < 26) return
 
     notificationManager.createNotificationChannelGroups(
             listOf(NotificationChannelGroup(
@@ -51,7 +60,7 @@ fun initNotifications() {
     )
 }
 
-@RequiresApi(Build.VERSION_CODES.O)
+@RequiresApi(26)
 private fun getExportChannel(): NotificationChannel = NotificationChannel(
         EXPORT_CHANNEL,
         RobotScouter.getString(R.string.export_channel_title),
@@ -64,7 +73,7 @@ private fun getExportChannel(): NotificationChannel = NotificationChannel(
     enableLights(true)
 }
 
-@RequiresApi(Build.VERSION_CODES.O)
+@RequiresApi(26)
 private fun getExportInProgressChannel(): NotificationChannel = NotificationChannel(
         EXPORT_IN_PROGRESS_CHANNEL,
         RobotScouter.getString(R.string.export_progress_channel_title),
@@ -83,12 +92,12 @@ private fun getExportInProgressChannel(): NotificationChannel = NotificationChan
  *
  * @see SAFE_NOTIFICATION_RATE_LIMIT_IN_MILLIS
  */
-class FilteringNotificationManager : Runnable {
+class FilteringNotificationManager {
     private val lock = ReentrantReadWriteLock()
     private val notifications: MutableMap<Int, Notification> = LinkedHashMap()
     private val vips: Queue<Int> = LinkedList()
 
-    private var updater: Future<*> by LateinitVal()
+    private var processor: Job by LateinitVal()
     private var isStopped = false
 
     /**
@@ -127,12 +136,12 @@ class FilteringNotificationManager : Runnable {
             check(!isStopped) { "Cannot start a previously stopped notification filter." }
         }
 
-        updater = executor.scheduleWithFixedDelay(
-                this,
-                0,
-                SAFE_NOTIFICATION_RATE_LIMIT_IN_MILLIS,
-                TimeUnit.MILLISECONDS
-        )
+        processor = GlobalScope.launch {
+            while (isActive) {
+                processQueue()
+                delay(SAFE_NOTIFICATION_RATE_LIMIT_IN_MILLIS)
+            }
+        }
     }
 
     fun isStopped(): Boolean = lock.read { isStopped }
@@ -152,7 +161,7 @@ class FilteringNotificationManager : Runnable {
     }
 
     fun stopNow() {
-        updater.reportOrCancel(true)
+        processor.cancel()
         lock.write {
             vips.clear()
             notifications.clear()
@@ -160,7 +169,7 @@ class FilteringNotificationManager : Runnable {
         }
     }
 
-    override fun run() {
+    private fun processQueue() {
         lock.write {
             (vips.poll() ?: notifications.keys.firstOrNull())?.let {
                 notificationManager.notify(it, checkNotNull(notifications.remove(it)))
@@ -168,22 +177,18 @@ class FilteringNotificationManager : Runnable {
         }
 
         lock.read {
-            if (isStopped && notifications.isEmpty()) updater.reportOrCancel()
+            if (isStopped && notifications.isEmpty()) processor.cancel()
         }
-    }
-
-    private companion object {
-        val executor = ScheduledThreadPoolExecutor(1)
     }
 }
 
 class NotificationIntentForwarder : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        notificationManager.apply {
+        systemNotificationManager.apply {
             val notificationId = intent.getIntExtra(KEY_NOTIFICATION_ID, -1)
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (Build.VERSION.SDK_INT >= 23) {
                 // Cancel group notification if there will only be one real notification left
                 activeNotifications.singleOrNull {
                     it.id == notificationId
@@ -210,10 +215,11 @@ class NotificationIntentForwarder : Activity() {
         private const val KEY_INTENT = "intent"
         private const val KEY_NOTIFICATION_ID = "notification_id"
 
-        fun getCancelIntent(notificationId: Int, forwardedIntent: Intent): Intent =
-                RobotScouter.intentFor<NotificationIntentForwarder>(
-                        KEY_INTENT to forwardedIntent,
-                        KEY_NOTIFICATION_ID to notificationId
-                )
+        fun getCancelIntent(
+                notificationId: Int,
+                forwardedIntent: Intent
+        ): Intent = Intent(RobotScouter, NotificationIntentForwarder::class.java)
+                .putExtra(KEY_INTENT, forwardedIntent)
+                .putExtra(KEY_NOTIFICATION_ID, notificationId)
     }
 }

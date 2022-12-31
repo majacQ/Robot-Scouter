@@ -12,12 +12,10 @@ dependencies {
     api(Config.Libs.Firebase.auth)
     api(Config.Libs.Firebase.indexing)
 
-    api(Config.Libs.Arch.extensions)
-    api(Config.Libs.Arch.common)
+    Config.Libs.Jetpack.lifecycle.forEach { api(it) }
 
-    implementation(Config.Libs.Anko.common)
-    implementation(Config.Libs.Support.appCompat) { isTransitive = false }
-    implementation(Config.Libs.Support.pref) { isTransitive = false }
+    implementation(Config.Libs.Jetpack.appCompat) { isTransitive = false }
+    implementation(Config.Libs.Jetpack.pref)
     implementation(Config.Libs.Misc.glide) { isTransitive = false }
 
     implementation(Config.Libs.PlayServices.auth) { isTransitive = false }
@@ -26,8 +24,7 @@ dependencies {
     implementation(Config.Libs.Firebase.storage)
     implementation(Config.Libs.Firebase.messaging)
     implementation(Config.Libs.Firebase.config)
-    implementation(Config.Libs.Arch.work)
-    implementation(Config.Libs.Arch.workFirebase)
+    Config.Libs.Jetpack.work.forEach { implementation(it) }
 
     implementation(Config.Libs.Misc.retrofit)
     implementation(Config.Libs.Misc.retrofitGson)

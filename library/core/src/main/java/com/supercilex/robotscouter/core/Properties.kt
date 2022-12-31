@@ -1,5 +1,6 @@
 package com.supercilex.robotscouter.core
 
+import kotlin.properties.ReadOnlyProperty
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
@@ -16,6 +17,13 @@ class LateinitVal<T : Any> : ReadWriteProperty<Any?, T> {
         check(this.value == null) {
             "Property ${property.name} is a val and cannot change its value."
         }
-        this.value = checkNotNull(value)
+        this.value = value
     }
+}
+
+class ValueSeeker<T>(private val evaluator: () -> T) : ReadOnlyProperty<Any?, T> {
+    private var value: T? = null
+
+    override fun getValue(thisRef: Any?, property: KProperty<*>) =
+            value ?: synchronized(this) { value ?: evaluator().also { value = it } }
 }

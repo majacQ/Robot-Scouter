@@ -1,10 +1,11 @@
-import org.jetbrains.kotlin.gradle.internal.CacheImplementation
 import java.io.FileInputStream
 import java.util.Properties
 
 plugins {
+    id("com.google.gms.google-services")
     id("io.fabric")
-    id("com.github.triplet.play")
+    Config.Plugins.run { publishing }
+    Config.Plugins.run { versioning }
 }
 if (isReleaseBuild) apply(plugin = "com.google.firebase.firebase-perf")
 crashlytics.alwaysUpdateBuildId = isReleaseBuild
@@ -16,14 +17,25 @@ android {
 
     defaultConfig {
         applicationId = "com.supercilex.robotscouter"
-        versionName = "2.3.1"
+        versionName = "dev"
+        base.archivesBaseName = "robot-scouter"
+
         multiDexEnabled = true
-        manifestPlaceholders = mapOf("appName" to "@string/app_name")
     }
 
     signingConfigs {
-        create("release") {
-            val keystorePropertiesFile = file("keystore.properties")
+        register("release") {
+            val keystorePropertiesFile = file(if (isReleaseBuild) {
+                "upload-keystore.properties"
+            } else {
+                "keystore.properties"
+            })
+
+            if (!keystorePropertiesFile.exists()) {
+                logger.warn("Release builds may not work: signing config not found.")
+                return@register
+            }
+
             val keystoreProperties = Properties()
             keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 
@@ -35,55 +47,54 @@ android {
     }
 
     buildTypes {
-        getByName("debug") {
+        named("debug") {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-DEBUG"
-            manifestPlaceholders = mapOf("appName" to "Robot Scouter DEBUG")
         }
 
-        getByName("release") {
+        named("release") {
             signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             setProguardFiles(listOf(
                     getDefaultProguardFile("proguard-android-optimize.txt"),
                     file("proguard-rules.pro")
             ))
-
-            // TODO Crashlytics doesn't support the new DSL yet so we need to downgrade
-//            postprocessing {
-//                removeUnusedCode true
-//                removeUnusedResources true
-//                obfuscate true
-//                optimizeCode true
-//                proguardFile 'proguard-rules.pro'
-//            }
         }
+    }
+
+    packagingOptions {
+        exclude("kotlin/**")
+        exclude("kotlinx/**")
+        exclude("META-INF/*.kotlin_module")
+        exclude("META-INF/*.version")
     }
 }
 
 play {
-    serviceAccountCredentials = file("google-play-auto-publisher.json")
-    track = "alpha"
-    resolutionStrategy = "auto"
-    outputProcessor = { versionNameOverride = "$versionNameOverride.$versionCode" }
+    val creds = file("google-play-auto-publisher.json")
+    isEnabled = creds.exists()
+    serviceAccountCredentials = creds
     defaultToAppBundles = true
+
+    promoteTrack = "alpha"
+
+    resolutionStrategy = "auto"
 }
+
+versionMaster {
+    configureVersionCode.set(false)
+}
+
+googleServices { disableVersionCheck = true }
 
 dependencies {
     implementation(project(":library:shared"))
+    implementation(project(":library:shared-scouting"))
 
-    implementation(Config.Libs.Support.multidex)
+    implementation(Config.Libs.Jetpack.multidex)
+    implementation(Config.Libs.Jetpack.work.first())
     implementation(Config.Libs.PlayServices.playCore)
-    implementation(Config.Libs.Misc.billing)
 
     implementation(Config.Libs.Firebase.perf)
-    implementation(Config.Libs.Firebase.invites)
-
-    // TODO https://issuetracker.google.com/issues/110012194
-    implementation(project(":library:shared-scouting"))
-    // TODO remove when Firebase updates their deps
-    implementation("com.google.firebase:firebase-iid:16.2.0")
-    implementation(Config.Libs.Misc.gson) // Override Firestore
+    implementation(Config.Libs.Firebase.links)
 }
-
-apply(plugin = "com.google.gms.google-services")
