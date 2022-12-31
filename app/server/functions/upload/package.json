@@ -9,6 +9,9 @@
   =======
   <<<<<<< snyk-upgrade-6ea513b85986a7eb9039948496b362bc
     "firebase-admin": "8.10.0",
+  <<<<<<< snyk-upgrade-e06dece1d9f608c1fddd7fff75211f18
+    "firebase-functions": "4.0.2",
+  =======
   >>>>>>> instant-apps
     "firebase-functions": "3.3.0",
   <<<<<<< snyk-upgrade-a860059acd93615cea58233fb1d9c4b3
@@ -18,6 +21,7 @@
   =======
     "firebase-admin": "11.4.1",
     "firebase-functions": "3.6.2",
+  >>>>>>> instant-apps
     "kotlin": "1.3.70",
   >>>>>>> instant-apps
   >>>>>>> instant-apps
