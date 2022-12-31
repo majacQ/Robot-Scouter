@@ -183,6 +183,12 @@ internal class HomeActivity : ActivityBase(), NavigationView.OnNavigationItemSel
         }
 
         GoogleApiAvailability.getInstance().makeGooglePlayServicesAvailable(this)
+
+        registerShortcut(KeyEvent.KEYCODE_N, KeyEvent.META_SHIFT_ON, 0) {
+            scoutListFragment?.addScoutWithSelector()
+        }
+        registerShortcut(KeyEvent.KEYCODE_E, 0) { export() }
+        registerShortcut(KeyEvent.KEYCODE_D, 0) { scoutListFragment?.showTeamDetails() }
     }
 
     private fun destIdToTag(id: Int) = when (id) {
@@ -273,6 +279,7 @@ internal class HomeActivity : ActivityBase(), NavigationView.OnNavigationItemSel
         return false
     }
 
+  <<<<<<< snyk-upgrade-8b98c69bb7423e6986ea50fb8b76167d
     override fun onShortcut(keyCode: Int, event: KeyEvent): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_E -> export()
@@ -281,6 +288,8 @@ internal class HomeActivity : ActivityBase(), NavigationView.OnNavigationItemSel
         return true
     }
 
+  =======
+  >>>>>>> shortcuts
     override fun onBackPressed() {
         if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
             drawerLayout.closeDrawer(GravityCompat.START)
