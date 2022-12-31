@@ -4,7 +4,11 @@
   "dependencies": {
     "@google-cloud/firestore": "3.7.1",
     "Robot-Scouter-common-server": "file:./common",
+  <<<<<<< snyk-upgrade-4da189fded79748adfdf5eccc6704768
     "firebase-admin": "11.0.0",
+  =======
+    "firebase-admin": "11.0.1",
+  >>>>>>> view-binding
     "firebase-functions": "3.3.0",
     "kotlin": "1.3.70",
     "kotlinx-coroutines-core": "1.3.4",
