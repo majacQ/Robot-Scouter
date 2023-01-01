@@ -4,13 +4,27 @@
   "dependencies": {
     "@google-cloud/firestore": "3.7.1",
     "Robot-Scouter-common-server": "file:./common",
+  <<<<<<< snyk-upgrade-0e3bfdee1f627b3635c6054f56a10d1f
+  <<<<<<< snyk-upgrade-fccbe2f222c76fe2e39fe07d49b38e15
+  <<<<<<< snyk-upgrade-4da189fded79748adfdf5eccc6704768
+    "firebase-admin": "11.0.0",
+  =======
+    "firebase-admin": "11.0.1",
+  >>>>>>> view-binding
+    "firebase-functions": "3.3.0",
+  =======
+    "firebase-admin": "8.10.0",
+    "firebase-functions": "3.23.0",
+  >>>>>>> snyk-upgrade-0e3bfdee1f627b3635c6054f56a10d1f
+  =======
     "firebase-admin": "8.10.0",
     "firebase-functions": "4.0.2",
+  >>>>>>> snyk-upgrade-6f31136d5fe8789f3c63d2d7002804b8
     "kotlin": "1.3.70",
     "kotlinx-coroutines-core": "1.3.4",
     "lru-cache": "5.1.1",
     "moment": "2.24.0",
-    "superagent": "5.2.2"
+    "superagent": "8.0.3"
   },
   "private": true,
   "engines": {
